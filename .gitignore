@@ -1,0 +1,19 @@
+# Build output and local state
+release/
+media-forge_data/
+*.log
+*.tmp
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/dist/
+build/work/
+dist/
+*.spec.bak
