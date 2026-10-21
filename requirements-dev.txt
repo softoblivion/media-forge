@@ -1,0 +1,2 @@
+# Build-time tools (never imported by the app at runtime). The icon generator uses Pillow from requirements.txt.
+pyinstaller>=6.22

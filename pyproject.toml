@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "media-forge"
+description = "Compress, upscale and convert video, photo and audio files on Windows"
+readme = "README.md"
+requires-python = ">=3.14"
+dynamic = ["version"]
+dependencies = [
+    "pywebview>=6.2.1,<7",
+    "pythonnet>=3.2.1",
+    "numpy",
+    "pillow>=13",
+    "pillow-heif",
+    "opencv-contrib-python-headless>=4.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyinstaller>=6.22",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+media_forge = ["ui/**/*", "models/*.pb", "models/*.md"]
+
+[tool.setuptools.dynamic]
+version = { attr = "media_forge.__version__" }

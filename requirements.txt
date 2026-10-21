@@ -1,0 +1,9 @@
+# Runtime dependencies.
+# Shell: pywebview's edgechromium backend runs on WebView2 through pythonnet.
+pywebview>=6.2.1,<7
+pythonnet>=3.2.1
+# Core: images (AVIF built into Pillow wheels, HEIC through pillow-heif), super-resolution upscale (dnn_superres).
+numpy
+pillow>=13
+pillow-heif
+opencv-contrib-python-headless>=4.10

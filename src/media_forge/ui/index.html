@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Media Forge</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/GeistMono-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/scene.css">
+  <link rel="stylesheet" href="css/glass.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <!-- Scene behind everything (js/background.js). -->
+  <div id="scene" aria-hidden="true"></div>
+
+  <!-- SVG filters of the lenses (js/glass.js appends one <filter> per surface). -->
+  <svg id="lg-defs" aria-hidden="true" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden"><defs></defs></svg>
+
+  <div id="app">
+    <!-- The list scrolls under the title bar and the footer; soft scroll edges sit on top of it. -->
+    <main id="list-scroll" class="list-scroll">
+      <div id="caps-banner" class="caps-banner glass-lite" role="status" hidden></div>
+      <div id="list" class="list" role="list" aria-label="Files"></div>
+      <section id="empty" class="empty" hidden>
+        <div class="empty-card">
+          <div class="empty-art" aria-hidden="true">
+            <span class="ea ea-video"><i></i></span>
+            <span class="ea ea-image"><i></i></span>
+            <span class="ea ea-audio"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          </div>
+          <h1 class="empty-title">Drop video, photo or audio files</h1>
+          <p class="empty-sub">Compress, upscale or convert them. Each file keeps its own settings.</p>
+          <button type="button" id="btn-choose" class="btn btn-tinted btn-l" aria-keyshortcuts="Control+O"></button>
+          <p class="empty-keys"><kbd>Ctrl</kbd> <kbd>O</kbd> to choose · drop anywhere in the window</p>
+          <p class="empty-formats">MP4 · MOV · MKV · WebM · JPEG · PNG · HEIC · WebP · MP3 · WAV · FLAC and more</p>
+        </div>
+      </section>
+    </main>
+    <div class="edge edge-top" aria-hidden="true"></div>
+    <div class="edge edge-bottom" aria-hidden="true"></div>
+
+    <header id="titlebar" class="titlebar">
+      <div class="tb-drag pywebview-drag-region"></div>
+      <div class="tb-brand pywebview-drag-region">
+        <span id="tb-glyph" class="tb-glyph pywebview-drag-region"></span>
+        <span class="tb-name pywebview-drag-region">Media Forge</span>
+      </div>
+      <button type="button" id="ver-pill" class="ver-pill" aria-haspopup="dialog"><span class="ver-dot" aria-hidden="true"></span><span class="ver-text"></span></button>
+      <div class="tb-space pywebview-drag-region"></div>
+      <div id="tb-cluster" class="tb-cluster">
+        <button type="button" id="btn-settings" class="tb-btn tb-gear" aria-label="Settings" title="Settings" aria-haspopup="dialog"></button>
+        <span class="tb-sep" aria-hidden="true"></span>
+        <button type="button" id="win-min" class="tb-btn" aria-label="Minimize" title="Minimize"></button>
+        <button type="button" id="win-close" class="tb-btn tb-close" aria-label="Close" title="Close"></button>
+      </div>
+    </header>
+
+    <footer id="foot" class="foot" hidden>
+      <div id="foot-stats" class="foot-stats"></div>
+      <button type="button" id="btn-start" class="start-pill" data-state="empty" aria-keyshortcuts="Control+Enter"></button>
+    </footer>
+  </div>
+
+  <!-- Overlays grow out of the control that opened them (js/overlay.js). -->
+  <div id="update-pop" class="popover" role="dialog" aria-label="Media Forge updates"><div class="ov-content"></div></div>
+  <div id="settings-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="ov-content"></div></div>
+
+  <div id="veil" class="veil" hidden></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+</body>
+</html>
