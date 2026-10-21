@@ -167,8 +167,7 @@ without NVENC support -> `auto`; `upscale_method` other than `lanczos` with `sca
   "parallel_jobs": 1,
   "open_when_done": false,
   "sound_when_done": true,
-  "auto_download_updates": false,
-  "update_check_interval": "30m",
+  "auto_download_updates": true,
   "defaults": { "video": { ...VideoSettings }, "image": { ...ImageSettings }, "audio": { ...AudioSettings } }
 }
 ```
@@ -182,8 +181,9 @@ without NVENC support -> `auto`; `upscale_method` other than `lanczos` with `sca
 - `open_when_done`: acted on by the shell: on `batch_done` with at least one finished file it opens the folder of
   the last output in Explorer with that file selected (one window per batch).
 - `sound_when_done`: acted on by the page (Web Audio chime on `batch_done`); the shell plays nothing.
-- `update_check_interval`: `30m` `1h` `6h` `1d` `1w` (the vendored updater's `CHECK_INTERVALS`); labels in the
-  UI "Every 30 minutes", "Every hour", "Every 6 hours", "Every day", "Every week".
+- `auto_download_updates`: default `true`; a release found by a check is downloaded in the background, installing
+  still needs a restart. The check period is fixed at 5 minutes and is not a setting; a file written by an earlier
+  version may still carry `update_check_interval`, which is ignored and dropped on the next save.
 
 ### 3.6 Capabilities
 
@@ -267,10 +267,6 @@ their own copy of what the engine accepts:
     { "id": "lanczos", "label": "Lanczos", "hint": "Resampling with a light sharpen. Fast." },
     { "id": "fsrcnn", "label": "FSRCNN", "hint": "Small deterministic super-resolution network, bundled. Moderate." },
     { "id": "edsr", "label": "EDSR", "hint": "Photos only. Larger deterministic network, downloaded once (38 MB per scale). Slow, best detail." }
-  ],
-  "update_intervals": [
-    { "id": "30m", "label": "Every 30 minutes" }, { "id": "1h", "label": "Every hour" }, { "id": "6h", "label": "Every 6 hours" },
-    { "id": "1d", "label": "Every day" }, { "id": "1w", "label": "Every week" }
   ]
 }
 ```

@@ -71,7 +71,7 @@ Shell tests never open a window:
 | File | Covers |
 |---|---|
 | `test_shell_events.py` | `EventPump`: nothing before `ready()`, `item` coalesced per id keeping its place, other events in order, `item_removed` drops a pending `item`, `items_added` goes before pending updates of its items, threaded delivery, JS escaping (`js_literal`, U+2028 / U+2029) |
-| `test_shell_bridge.py` | public names = exactly BRIDGE_API.md 2 (and the parameter names pywebview sees), delegation to the engine, argument checks, error sentences, settings refusals (3.5 sentences, settings re-sent), dialogs and their filters, minimize / close, focus events, shutdown, the drop listener, self-update wiring (check, download, apply closes the window, auto download, interval change) |
+| `test_shell_bridge.py` | public names = exactly BRIDGE_API.md 2 (and the parameter names pywebview sees), delegation to the engine, argument checks, error sentences, settings refusals (3.5 sentences, settings re-sent), dialogs and their filters, minimize / close, focus events, shutdown, the drop listener, self-update wiring (check, download, apply closes the window, auto download, settings changes leave the scheduler alone) |
 | `test_shell_drop.py` | `pywebviewFullPath` extraction, one-level folder expansion to media files, the extension table against `CORE.md` 2 and the core's `detect_kind` |
 | `test_shell_selfupdate.py` | the `core\selfupdate.py` adapter: repository, asset, names, environment variable, exe path when frozen, scheduler, `--apply-update` routed before the mutex |
 | `test_shell_winutil.py` | size ladder against work areas, centring, the DWM border `COLORREF`, the hook and DWM helpers without a window, no resize code left |

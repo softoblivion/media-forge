@@ -104,10 +104,6 @@ UPSCALE_METHODS = [
 ]
 # EDSR runs at well under one frame per second on a CPU, so video offers the first two methods only.
 VIDEO_UPSCALE_METHODS = UPSCALE_METHODS[:2]
-UPDATE_INTERVALS = [
-    {"id": "30m", "label": "Every 30 minutes"}, {"id": "1h", "label": "Every hour"},
-    {"id": "6h", "label": "Every 6 hours"}, {"id": "1d", "label": "Every day"}, {"id": "1w", "label": "Every week"},
-]
 
 AUDIO_ONLY_VIDEO_FORMATS = ("mp3", "m4a", "opus", "flac", "wav")
 LOSSLESS_AUDIO_FORMATS = ("flac", "wav")
@@ -146,7 +142,6 @@ def options(caps: Mapping[str, Any] | None = None) -> dict:
         "audio": {"formats": AUDIO_FORMATS, "bitrates": AUDIO_BITRATES, "sample_rates": AUDIO_SAMPLE_RATES,
                   "channels": AUDIO_CHANNELS},
         "upscale_methods": UPSCALE_METHODS,
-        "update_intervals": UPDATE_INTERVALS,
     })
 
 

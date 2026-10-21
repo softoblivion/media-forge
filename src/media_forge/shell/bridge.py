@@ -476,7 +476,7 @@ class Bridge:
     # -- self-update (wiring called by main / the updater thread)
     def _on_update_status(self, status: dict) -> None:
         self._emit("update", status)
-        if status.get("stage") != "available" or not self._setting("auto_download_updates", False):
+        if status.get("stage") != "available" or not self._setting("auto_download_updates", True):
             return
         version = str(status.get("latest") or "")
         with self._lock:
@@ -514,7 +514,7 @@ class Bridge:
         if self._scheduler is not None:
             try:
                 self._scheduler.start()
-                log.info("periodic update checks every %s", getattr(self._scheduler, "interval_key", "?"))
+                log.info("periodic update checks every 5 minutes")
             except Exception:  # noqa: BLE001
                 log.warning("periodic update checks could not start", exc_info=True)
 
@@ -656,10 +656,6 @@ class Bridge:
                 log.debug("could not re-send the settings", exc_info=True)
             raise BridgeError(message) from None
         after = after if isinstance(after, dict) else (self._engine.get_settings() or {})
-        interval = after.get("update_check_interval")
-        if interval != before.get("update_check_interval") and self._scheduler is not None and interval:
-            self._scheduler.set_interval(interval)
-            log.info("periodic update checks every %s", interval)
         if after.get("auto_download_updates") and not before.get("auto_download_updates") \
                 and self._updater is not None:
             status = self._updater.status()

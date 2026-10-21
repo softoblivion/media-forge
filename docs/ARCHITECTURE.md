@@ -26,7 +26,7 @@ A Windows desktop utility, shipped as one portable `MediaForge.exe`, that takes 
 | Video / audio | `ffmpeg.exe` + `ffprobe.exe` as subprocesses: `media-forge_data\bin` first, then PATH, else downloaded once from yt-dlp/FFmpeg-Builds (`RECIPES.md`, section 3) | Every codec and container the app offers is one ffmpeg invocation; NVENC (H.264 / HEVC / AV1) is used when the machine has it. |
 | Images | Pillow (JPEG, PNG, WebP, AVIF, TIFF, BMP; HEIC through `pillow-heif` when importable) | AVIF is built into Pillow 11+ wheels; everything is in-process, no temp files. |
 | Upscale | OpenCV (`opencv-contrib-python-headless`, `dnn_superres`) + NumPy; FSRCNN models bundled, EDSR downloaded on demand | Deterministic CNN super-resolution, CPU only, no GAN, no diffusion, no prompt. Video frames stream through ffmpeg pipes. |
-| Self-update | GitHub Releases of `softoblivion/media-forge` (assets `MediaForge.exe` + `SHA256SUMS`) through the vendored `selfupdate` package: check on launch and on the `update_check_interval` setting, verified download, rename-in-place swap on restart (`_workspace\RECIPES.md`, section 1) | The workspace's shared updater; no installer, no helper process. |
+| Self-update | GitHub Releases of `softoblivion/media-forge` (assets `MediaForge.exe` + `SHA256SUMS`) through the vendored `selfupdate` package: check on launch and then every 5 minutes (fixed period, no setting), verified download, rename-in-place swap on restart (`_workspace\RECIPES.md`, section 1) | The workspace's shared updater; no installer, no helper process. |
 | Packaging | PyInstaller one-file, windowed, own icon | One exe to double-click. |
 
 ## 3. Repository layout
@@ -163,9 +163,11 @@ are downloaded on first use into `models/` and verified by SHA-256 (`CORE.md`, 4
 "MediaForge.exe"`, `APP_NAME = "Media Forge"`, `RELEASE_URL_ENV = "MEDIA_FORGE_RELEASE_URL"`, logger
 `media_forge.selfupdate`) exactly like Frame Notes' `core/selfupdate.py`. `shell/main.py` handles `APPLY_FLAG`
 before anything else, calls `startup()` and `check_background()` after the window is shown, starts the
-`UpdateScheduler` on `settings.update_check_interval`, downloads automatically when `auto_download_updates` is on,
-and closes the window after a successful `apply()`. The UI shows the status in the title bar (version label with a
-dot when a release is available), a popover with notes, Download / Restart buttons, and the interval setting.
+`UpdateScheduler` (fixed period of 5 minutes with a random offset; the wait doubles after failed checks up to one
+hour; no check without a network connection), downloads automatically when `auto_download_updates` is on (the
+default), and closes the window after a successful `apply()`. The UI shows the status in the title bar (version
+label with a dot when a release is available), a popover with notes, Download / Restart buttons, and the setting
+for the automatic download.
 
 ## 6. Engine facade
 

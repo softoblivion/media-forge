@@ -36,7 +36,6 @@ function initUpdate(state) {
       version: state.version || '',
       status: state.update || null,
       settings: state.settings,
-      intervals: (state.options && state.options.update_intervals) || [],
       hasActiveWork: busy,
       restartWarning: 'Files in progress stop when the app restarts',
       onStatus: (u) => {

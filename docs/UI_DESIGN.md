@@ -198,8 +198,8 @@ lenses re-filter their small backdrop each frame (4 steady surfaces).
   + open; File name suffix with a live example), Processing (Files at the same time 1-3 stepper, Open the folder when
   done, Sound when done), Defaults for new files (Video / Photo / Audio + the same panel), Engine (FFmpeg version and
   status, GPU and NVENC codecs, FSRCNN, EDSR, AVIF / HEIC), Updates (status line + Check for updates / Download /
-  Restart to update, Check interval select with the five labels of Options.update_intervals, Download updates
-  automatically), the version line.
+  Restart to update, Download updates automatically, on by default; the check period is fixed and has no control),
+  the version line.
 
 ### 6.2 Settings panels (BRIDGE_API 3.3)
 
@@ -219,7 +219,7 @@ number drops stale answers; item events do not move a panel while its own patch 
 The version pill, the update popover, the update toasts and the "Updates" rows of the settings sheet are the kit's
 update control (`mountUpdateControl`; stages, copy and behaviour in LIQUID_UI.md, section 7; its bridge contract,
 section 8, matches BRIDGE_API sections 2, 3.5, 3.7, 3.8 and 4). Media Forge passes: product "Media Forge", the
-State's version, update status, settings and `Options.update_intervals`, the restart warning "Files in progress stop
+State's version, update status and settings, the restart warning "Files in progress stop
 when the app restarts" (shown with "Restart anyway" while files are queued or running), `onStatus` (store `update`)
 and `onSettings` (store `settings`); `js/main.js` forwards every confirmed `settings` to `setSettings`.
 

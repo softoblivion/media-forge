@@ -200,7 +200,7 @@ function build() {
 
   content.querySelectorAll('.btn, .icon-btn').forEach((b) => gel(b));
 
-  // Updates: status line with the next action, check interval, automatic download (the kit's rows).
+  // Updates: status line with the next action, automatic download (the kit's rows).
   if (update) updateRows = update.mountSettings(content.querySelector('.set-updates .set-card'));
 
   refresh(s);

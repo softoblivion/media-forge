@@ -34,9 +34,8 @@ DEFAULTS = {
 
 SETTINGS = {
     "output_mode": "beside", "output_dir": "", "suffix": "_forge", "parallel_jobs": 1, "open_when_done": False,
-    "sound_when_done": True, "auto_download_updates": False, "update_check_interval": "30m",
+    "sound_when_done": True, "auto_download_updates": True,
 }
-INTERVALS = ("30m", "1h", "6h", "1d", "1w")
 
 MSG_BUSY = "The file is being processed."
 MSG_UNKNOWN = "The file is no longer in the list."
@@ -311,8 +310,6 @@ class FakeEngine:
                 raise FakeUserError(MSG_OUTPUT_DIR)
             if merged["output_mode"] == "beside" and not merged["suffix"]:
                 raise FakeUserError(MSG_SUFFIX)
-            if merged["update_check_interval"] not in INTERVALS:
-                merged["update_check_interval"] = "30m"
             self._settings = merged
             snapshot = copy.deepcopy(merged)
         self._emit("settings", snapshot)
@@ -325,8 +322,7 @@ class FakeEngine:
         return {"video": {"formats": [{"id": "mp4", "label": "MP4", "codecs": ["h264", "h265", "av1"],
                                        "audio": True}]},
                 "image": {"formats": [{"id": "jpg", "label": "JPEG", "lossy": True}]},
-                "audio": {"formats": [{"id": "mp3", "label": "MP3", "lossy": True}]},
-                "update_intervals": [{"id": k, "label": k} for k in INTERVALS]}
+                "audio": {"formats": [{"id": "mp3", "label": "MP3", "lossy": True}]}}
 
     # -- simulated work
     def _run(self) -> None:

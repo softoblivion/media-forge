@@ -44,7 +44,7 @@ class SettingsTest(ScratchCase):
         s = self.fresh("validation")
         s.load()
         self.assertEqual(s.patch({"parallel_jobs": 9})["parallel_jobs"], 3)
-        self.assertEqual(s.patch({"update_check_interval": "2h"})["update_check_interval"], "30m")
+        self.assertNotIn("update_check_interval", s.patch({"update_check_interval": "2h"}))  # the setting is gone
         with self.assertRaises(UserError) as cm:
             s.patch({"suffix": "a/b"})
         self.assertIn("not allowed", cm.exception.message)
@@ -82,6 +82,27 @@ class SettingsTest(ScratchCase):
         self.assertEqual(data["suffix"], "_forge")
         self.assertEqual(data["output_mode"], "folder")  # kept; jobs report the missing folder
         self.assertEqual(data["defaults"]["audio"]["bitrate_k"], 256)
+
+    def test_auto_download_defaults_to_on(self):
+        s = self.fresh("auto_download")
+        self.assertIs(s.load()["auto_download_updates"], True)
+        s.paths.settings_file.write_text(json.dumps({"suffix": "_x"}), encoding="utf-8")  # key absent from the file
+        self.assertIs(s.load()["auto_download_updates"], True)
+        s.paths.settings_file.write_text(json.dumps({"auto_download_updates": False}), encoding="utf-8")
+        self.assertIs(s.load()["auto_download_updates"], False)  # a copy that turned it off keeps it off
+
+    def test_interval_key_of_older_versions_is_dropped(self):
+        s = self.fresh("old_interval")
+        text = json.dumps({"version": 1, "update_check_interval": "6h", "suffix": "_x"})
+        s.paths.settings_file.write_text(text, encoding="utf-8")
+        data = s.load()
+        self.assertNotIn("update_check_interval", data)
+        self.assertEqual(data["suffix"], "_x")
+        self.assertEqual(s.paths.settings_file.read_text(encoding="utf-8"), text)  # loading does not rewrite the file
+        self.assertFalse(s.paths.settings_file.with_name("settings.json.bad").exists())
+        s.patch({"parallel_jobs": 2})  # the next save writes the file without the key
+        raw = json.loads(s.paths.settings_file.read_text(encoding="utf-8"))
+        self.assertNotIn("update_check_interval", raw)
 
     def test_memory_only(self):
         paths = AppPaths(home=self.out / "memory")

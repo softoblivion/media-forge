@@ -81,19 +81,13 @@ class FakeUpdater:
 
 class FakeScheduler:
     def __init__(self):
-        self.interval_key = "30m"
         self.started = self.stopped = False
-        self.intervals: list[str] = []
 
     def start(self):
         self.started = True
 
     def stop(self):
         self.stopped = True
-
-    def set_interval(self, key):
-        self.intervals.append(key)
-        self.interval_key = key
 
 
 class BridgeTestBase(unittest.TestCase):
@@ -475,6 +469,7 @@ class UpdateWiringTest(BridgeTestBase):
     def test_auto_download_only_when_enabled(self):
         updater = FakeUpdater(stage="available")
         self.bridge._attach_updater(updater)
+        self.bridge.set_settings({"auto_download_updates": False})  # the default is on
         self.bridge._on_update_status({"stage": "available", "latest": "0.2.0"})
         time.sleep(0.2)
         self.assertNotIn("download", updater.calls)
@@ -484,18 +479,11 @@ class UpdateWiringTest(BridgeTestBase):
             time.sleep(0.02)
         self.assertIn("download", updater.calls)
 
-    def test_interval_change_reaches_scheduler(self):
+    def test_settings_changes_leave_the_scheduler_alone(self):
         scheduler = FakeScheduler()
         self.bridge._attach_updater(FakeUpdater(), scheduler)
-        self.bridge.set_settings({"update_check_interval": "6h"})
         self.bridge.set_settings({"parallel_jobs": 2})
-        self.assertEqual(scheduler.intervals, ["6h"])
-
-    def test_interval_keys_match_the_updater(self):
-        from media_forge.core.selfupdate import INTERVAL_KEYS
-        from tests.shell_fake_engine import INTERVALS
-
-        self.assertEqual(tuple(INTERVALS), INTERVAL_KEYS)
+        self.assertFalse(scheduler.started or scheduler.stopped)
 
 
 class ModuleTest(unittest.TestCase):

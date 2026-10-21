@@ -113,7 +113,7 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(opts["video"]["audio_bitrates"], [96, 128, 192, 256, 320])
         self.assertEqual(opts["audio"]["bitrates"], [64, 96, 128, 160, 192, 256, 320])
         self.assertEqual([m["id"] for m in opts["upscale_methods"]], ["lanczos", "fsrcnn", "edsr"])
-        self.assertEqual([i["id"] for i in opts["update_intervals"]], ["30m", "1h", "6h", "1d", "1w"])
+        self.assertNotIn("update_intervals", opts)
         opts["video"]["formats"].clear()  # a copy, not the module table
         self.assertTrue(catalog.options(CAPS_GPU)["video"]["formats"])
 
