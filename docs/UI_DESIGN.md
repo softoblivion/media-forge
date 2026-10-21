@@ -65,10 +65,10 @@ the FFmpeg banner and the menus (menus use a near-opaque tint).
 The kit's tokens are the values below (its defaults are this app's identity, so Media Forge overrides none of
 them); `css/app.css` adds the app tokens: kind colours `--k-video`, `--k-image`, `--k-audio` and `--foot-h`.
 
-- Fonts embedded in the kit's `fonts/` (no network): `InterVariable.woff2` (Inter 4, OFL), `GeistMono-Variable.woff2`
-  (Geist Mono, OFL), licences beside them. The text face is named in one place (the kit's `@font-face` block and
-  `--font-text`); the page has no font preload links. Inter features `cv05`, `ss03` through `--ff-feat`; mono
-  without ligatures.
+- Fonts embedded in the kit's `fonts/` (no network): Unbounded (OFL, Latin and Cyrillic subsets; kit 1.1.0, the
+  workspace's text face since 2026-10-21, bold type roles) and `GeistMono-Variable.woff2` (Geist Mono, OFL),
+  licences beside them. The text face is named in one place (the kit's `@font-face` blocks and `--font-text`);
+  the page has no font preload links. No text features; mono without ligatures.
 - Type roles (`--t-*` with tracking `--tr-*`): display 650 22, title 630 19, headline 630 15, card 560 14, body 450
   13.5, callout 450 13, control 560 13 / 12.5 / 12, meta 470 12 (tabular), caption 520 11.5, micro 600 10.5, mono
   12.5 / 12 / 11. Every number that changes in place is `tabular-nums`.
