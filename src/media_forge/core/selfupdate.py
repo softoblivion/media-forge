@@ -13,8 +13,6 @@ from typing import Any, Callable
 
 from ..vendor.selfupdate import (
     APPLY_FLAG,
-    CHECK_INTERVALS,
-    DEFAULT_CHECK_INTERVAL,
     SelfUpdater,
     UpdateConfig,
     UpdateScheduler,
@@ -26,15 +24,11 @@ ASSET_NAME = "MediaForge.exe"
 APP_NAME = "Media Forge"
 RELEASE_URL_ENV = "MEDIA_FORGE_RELEASE_URL"
 LOGGER_NAME = "media_forge.selfupdate"
-INTERVAL_KEYS = tuple(key for key, _ in CHECK_INTERVALS)
 
 __all__ = [
     "APPLY_FLAG",
     "APP_NAME",
     "ASSET_NAME",
-    "CHECK_INTERVALS",
-    "DEFAULT_CHECK_INTERVAL",
-    "INTERVAL_KEYS",
     "LOGGER_NAME",
     "RELEASE_URL_ENV",
     "REPO",
@@ -89,6 +83,6 @@ def build_updater(
     return SelfUpdater(build_config(paths, version, on_status, on_toast))
 
 
-def build_scheduler(updater: SelfUpdater, interval_key: str) -> UpdateScheduler:
-    """Periodic checks on the interval of the `update_check_interval` setting (an unknown key gives the default)."""
-    return UpdateScheduler(updater, interval_key, logger_name=LOGGER_NAME + ".schedule")
+def build_scheduler(updater: SelfUpdater) -> UpdateScheduler:
+    """Periodic checks at the updater library's fixed period (5 minutes, longer after failures, none offline)."""
+    return UpdateScheduler(updater, logger_name=LOGGER_NAME + ".schedule")

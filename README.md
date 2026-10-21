@@ -89,7 +89,7 @@ up-to-date Windows 10). No installer, no admin rights.
 | **Outputs** | Next to the source or into one folder; a numbered suffix instead of an overwrite; **Show in folder**, **Open**, **Run again**; an optional folder opening and a sound when a batch finishes. |
 | **Liquid Glass UI** | A 3:4 portrait window with refracting glass controls, spring motion and an animated background; embedded Inter and Geist Mono fonts; animation stops when nothing moves. |
 | **Portable** | One exe, one data folder next to it, no installer. The second launch brings the running window to the front. |
-| **Self-updating app** | New releases are detected on launch and then every 30 minutes (or hourly, every 6 hours, daily, weekly), downloaded on **Download** or automatically, verified by size and SHA-256 and installed on **Restart**. |
+| **Self-updating app** | New releases are detected on launch and then every 5 minutes, downloaded in the background (or on **Download**), verified by size and SHA-256 and installed on **Restart**. |
 
 ## Usage
 
@@ -120,8 +120,7 @@ The gear in the title bar opens the settings sheet.
 | **Open the folder when done** | Opens Explorer with the last output selected after a batch. |
 | **Sound when done** | A short chime when a batch finishes. |
 | **Defaults for new files** | The per-kind settings every new video, photo or audio file starts with. |
-| **Check for updates** | Every 30 minutes (default), hour, 6 hours, day or week. |
-| **Download updates automatically** | Off by default: a new release is downloaded only on **Download**. |
+| **Download updates automatically** | On by default: a new release is downloaded in the background; turn it off to download only on **Download**. Installing always needs **Restart**. |
 
 ## Formats and codecs
 
@@ -168,11 +167,12 @@ EDSR models on first use. Your files never leave the machine, and no job writes 
 
 ## Updates
 
-The app checks GitHub Releases on every launch in the background and then on a timer: every 30 minutes by default,
-or every hour, 6 hours, day or week (**Check for updates** in Settings). A new version is shown on the version
-label in the title bar; **Download** fetches it (or the app does it on its own when **Download updates
-automatically** is on), verifies the byte size and the SHA-256 against the release's `SHA256SUMS`, and **Restart to
-update** installs it: the downloaded exe waits for the app to exit, keeps the old file as `MediaForge.exe.old`
+The app checks GitHub Releases on every launch in the background and then every 5 minutes while it runs. A failed
+check is retried later with a growing wait of up to an hour, and nothing is checked without a network connection.
+A new version is shown on the version label in the title bar; **Download** fetches it (the app does it on its own
+unless **Download updates automatically** is turned off), verifies the byte size and the SHA-256 against the
+release's `SHA256SUMS`, and **Restart to update** installs it: a version downloaded in the background still
+installs only on Restart. The downloaded exe waits for the app to exit, keeps the old file as `MediaForge.exe.old`
 until the new one has started, and relaunches it. If anything fails the current exe stays untouched. Every release
 ships two assets: `MediaForge.exe` and `SHA256SUMS`. Release notes live in [`docs/releases/`](docs/releases/).
 

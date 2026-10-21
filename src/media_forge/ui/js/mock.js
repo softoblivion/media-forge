@@ -157,8 +157,7 @@ export function createMock({ params, dispatch }) {
     parallel_jobs: 1,
     open_when_done: false,
     sound_when_done: true,
-    auto_download_updates: false,
-    update_check_interval: '30m',
+    auto_download_updates: true,
     defaults: clone(DEFAULTS),
   };
   let settings = loadSettings();
@@ -170,7 +169,9 @@ export function createMock({ params, dispatch }) {
     } catch {
       saved = null;
     }
-    const s = { ...clone(BASE_SETTINGS), ...(saved && typeof saved === 'object' ? saved : {}) };
+    const known = (saved && typeof saved === 'object') ? Object.fromEntries(
+      Object.entries(saved).filter(([k]) => k in BASE_SETTINGS)) : {};  // keys of older mock versions are dropped
+    const s = { ...clone(BASE_SETTINGS), ...known };
     s.defaults = {
       video: normalize('video', DEFAULTS.video, s.defaults && s.defaults.video),
       image: normalize('image', DEFAULTS.image, s.defaults && s.defaults.image),
@@ -187,7 +188,6 @@ export function createMock({ params, dispatch }) {
     }
   }
 
-  const INTERVALS = OPTIONS.update_intervals.map((x) => x.id);
   const BAD_NAME = /[<>:"/\\|?*\u0000-\u001f]/;
 
   function applySettingsPatch(patch) {
@@ -216,9 +216,6 @@ export function createMock({ params, dispatch }) {
         case 'sound_when_done':
         case 'auto_download_updates':
           if (typeof v === 'boolean') next[k] = v;
-          break;
-        case 'update_check_interval':
-          if (INTERVALS.includes(v)) next.update_check_interval = v;
           break;
         case 'defaults':
           if (v && typeof v === 'object') {
@@ -1147,10 +1144,6 @@ function buildOptions(caps) {
       { id: 'lanczos', label: 'Lanczos', hint: 'Resampling with a light sharpen. Fast.' },
       { id: 'fsrcnn', label: 'FSRCNN', hint: 'Small deterministic super-resolution network, bundled. Moderate.' },
       { id: 'edsr', label: 'EDSR', hint: 'Photos only. Larger deterministic network, downloaded once (38 MB per scale). Slow, best detail.' },
-    ],
-    update_intervals: [
-      { id: '30m', label: 'Every 30 minutes' }, { id: '1h', label: 'Every hour' }, { id: '6h', label: 'Every 6 hours' },
-      { id: '1d', label: 'Every day' }, { id: '1w', label: 'Every week' },
     ],
   };
   if (!caps.heif) o.image.formats = o.image.formats.filter((f) => f.id !== 'heic');

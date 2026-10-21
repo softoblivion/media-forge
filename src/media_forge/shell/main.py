@@ -206,8 +206,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         log.exception("engine start failed")
     try:
         updater = build_updater(paths, __version__, bridge._on_update_status, bridge._on_update_toast)
-        interval = str((engine.get_settings() or {}).get("update_check_interval") or "")
-        bridge._attach_updater(updater, build_scheduler(updater, interval))
+        bridge._attach_updater(updater, build_scheduler(updater))
     except Exception:  # noqa: BLE001 - the app works without updates
         log.exception("the updater could not be created")
 
