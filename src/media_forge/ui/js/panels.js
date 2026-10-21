@@ -7,11 +7,11 @@
 // Visibility follows the settings: codec / encoder only for formats with codecs, upscale method and
 // sharpen only for 2x / 4x, audio bitrate only where it applies, and so on.
 
-import { Segmented, Switch, Slider } from './controls.js';
+import { Segmented, Switch, Slider } from '../vendor/liquid_ui/js/controls.js';
 import { store, watch, gpuFor, formatsOf } from './store.js';
 import { icon } from './icons.js';
 import { escapeHtml } from './format.js';
-import { toast } from './toast.js';
+import { toast } from '../vendor/liquid_ui/js/toast.js';
 
 const AUDIO_ONLY = new Set(['mp3', 'm4a', 'opus', 'flac', 'wav']);
 const UPSCALE = new Set(['2x', '4x']);

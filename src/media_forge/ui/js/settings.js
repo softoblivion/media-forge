@@ -7,22 +7,24 @@
 
 import { call, on } from './api.js';
 import { store, notify, watch } from './store.js';
-import { Overlay } from './overlay.js';
-import { gel } from './glass.js';
-import { Segmented, Switch, Stepper, Select } from './controls.js';
+import { Overlay } from '../vendor/liquid_ui/js/overlay.js';
+import { gel } from '../vendor/liquid_ui/js/glass.js';
+import { Segmented, Switch, Stepper } from '../vendor/liquid_ui/js/controls.js';
 import { SettingsPanel } from './panels.js';
 import { icon } from './icons.js';
 import { escapeHtml, KIND_LABEL } from './format.js';
-import { toast } from './toast.js';
-import { statusLine, runCheck, runDownload, restart, updateState } from './update.js';
+import { toast } from '../vendor/liquid_ui/js/toast.js';
 
 let sheet, overlay, content;
 let ctl = {};
 let defaultsPanel = null;
 let defaultsKind = 'video';
+let update = null;      // the kit's update control (main.js); renders the "Updates" rows
+let updateRows = null;
 const inflight = new Map(); // key -> count
 
-export function initSettings(state) {
+export function initSettings(state, updateControl) {
+  update = updateControl;
   store.settings = state.settings;
   sheet = document.getElementById('settings-sheet');
   content = sheet.querySelector('.ov-content');
@@ -36,7 +38,6 @@ export function initSettings(state) {
     if (overlay.open) refresh(s);
   });
   watch('caps', () => overlay.open && renderEngine());
-  watch('update', () => overlay.open && renderUpdates());
 }
 
 export function settingsOpen() {
@@ -74,6 +75,8 @@ function teardown() {
 function destroyControls() {
   for (const c of Object.values(ctl)) c && c.destroy && c.destroy();
   ctl = {};
+  if (updateRows) updateRows.destroy();
+  updateRows = null;
   if (defaultsPanel) defaultsPanel.destroy();
   defaultsPanel = null;
 }
@@ -136,12 +139,7 @@ function build() {
         </div>
       </section>
       ${group('Engine', '<div class="eng-rows" data-engine></div>')}
-      ${group('Updates', `
-        <div class="set-row set-row-col" data-row="update">
-          <div class="upd-line"><span class="upd-status" data-upd-status></span><span class="upd-acts" data-upd-acts></span></div>
-        </div>
-        ${rowHtml('update_check_interval', 'Check interval', 'On launch, then repeated while the app runs')}
-        ${rowHtml('auto_download_updates', 'Download updates automatically', 'Installing still needs a restart')}`)}
+      ${group('Updates', '', 'set-updates')}
       <p class="set-about" data-about></p>
     </div>`;
 
@@ -181,7 +179,7 @@ function build() {
   // Processing.
   ctl.parallel_jobs = new Stepper({ label: 'Files at the same time', value: s.parallel_jobs, min: 1, max: 3, onChange: (v) => save('parallel_jobs', { parallel_jobs: v }) });
   slot('parallel_jobs').append(ctl.parallel_jobs.el);
-  for (const k of ['open_when_done', 'sound_when_done', 'auto_download_updates']) {
+  for (const k of ['open_when_done', 'sound_when_done']) {
     ctl[k] = new Switch({ label: content.querySelector(`[data-row="${k}"] .set-label span`).textContent, checked: s[k], onChange: (v) => save(k, { [k]: v }) });
     slot(k).append(ctl[k].el);
   }
@@ -200,20 +198,13 @@ function build() {
   slot('defaults-kind').append(ctl.defaultsKind.el);
   buildDefaultsPanel();
 
-  // Update interval.
-  const intervals = (store.options && store.options.update_intervals) || [];
-  ctl.update_check_interval = new Select({
-    label: 'Check interval',
-    options: intervals.map((x) => ({ value: x.id, label: x.label })),
-    value: s.update_check_interval,
-    onChange: (v) => save('update_check_interval', { update_check_interval: v }),
-  });
-  slot('update_check_interval').append(ctl.update_check_interval.el);
-
   content.querySelectorAll('.btn, .icon-btn').forEach((b) => gel(b));
+
+  // Updates: status line with the next action, check interval, automatic download (the kit's rows).
+  if (update) updateRows = update.mountSettings(content.querySelector('.set-updates .set-card'));
+
   refresh(s);
   renderEngine();
-  renderUpdates();
 }
 
 const slot = (id) => content.querySelector(`[data-slot="${id}"]`);
@@ -284,8 +275,7 @@ function refresh(s, justSaved = null) {
   const sufRow = content.querySelector('[data-row="suffix"] small');
   if (sufRow && s.output_mode === 'folder' && !s.suffix) sufRow.innerHTML += ' <span class="set-note">(no suffix: the name stays the same)</span>';
   if (!busy('parallel_jobs') && ctl.parallel_jobs) ctl.parallel_jobs.set(s.parallel_jobs);
-  for (const k of ['open_when_done', 'sound_when_done', 'auto_download_updates']) if (!busy(k) && ctl[k]) ctl[k].set(s[k]);
-  if (!busy('update_check_interval') && ctl.update_check_interval) ctl.update_check_interval.set(s.update_check_interval);
+  for (const k of ['open_when_done', 'sound_when_done']) if (!busy(k) && ctl[k]) ctl[k].set(s[k]);
   if (!busy('defaults') && defaultsPanel && justSaved !== 'defaults') defaultsPanel.external(s.defaults[defaultsKind]);
   content.querySelector('[data-about]').textContent = `Media Forge ${store.version || ''}`.trim();
 }
@@ -315,21 +305,6 @@ function renderEngine() {
     </div>`).join('');
 }
 
-function renderUpdates() {
-  const st = content && content.querySelector('[data-upd-status]');
-  if (!st) return;
-  const u = updateState();
-  st.innerHTML = `<b>${escapeHtml(statusLine(u))}</b>${u.checked_at ? `<small>Checked ${escapeHtml(new Date(u.checked_at * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</small>` : ''}`;
-  const acts = content.querySelector('[data-upd-acts]');
-  let html = '';
-  if (u.stage === 'available') html = `<button type="button" class="btn btn-s btn-tinted" data-act="upd-download">${icon('down')}<span>Download</span></button>`;
-  else if (u.stage === 'ready') html = `<button type="button" class="btn btn-s btn-tinted" data-act="upd-apply" ${u.can_apply ? '' : 'disabled'}>${icon('refresh')}<span>Restart to update</span></button>`;
-  else if (u.stage === 'downloading') html = `<button type="button" class="btn btn-s" disabled>${icon('down')}<span>${u.progress != null ? `${Math.round(u.progress * 100)}%` : 'Downloading…'}</span></button>`;
-  else html = `<button type="button" class="btn btn-s" data-act="upd-check" ${u.stage === 'checking' ? 'disabled' : ''}>${icon('refresh')}<span>${u.stage === 'checking' ? 'Checking…' : 'Check for updates'}</span></button>`;
-  acts.innerHTML = html;
-  acts.querySelectorAll('.btn').forEach((b) => gel(b));
-}
-
 async function onClick(e) {
   const b = e.target.closest('[data-act]');
   if (!b) return;
@@ -342,12 +317,6 @@ async function onClick(e) {
     case 'open-dir':
       if (store.settings.output_dir) call('open_path', store.settings.output_dir).catch((err) => toast('error', err.message));
       return;
-    case 'upd-check':
-      return runCheck();
-    case 'upd-download':
-      return runDownload();
-    case 'upd-apply':
-      return restart();
     default:
   }
 }

@@ -288,6 +288,9 @@ class Engine:
     def start_items(self, ids: Iterable[str] | None) -> list[str]:
         return self.queue.start_items(None if ids is None else list(ids))
 
+    def start_now(self, item_id: str) -> bool:
+        return self.queue.start_now(item_id)
+
     def cancel(self, item_id: str) -> bool:
         return self.queue.cancel(item_id)
 

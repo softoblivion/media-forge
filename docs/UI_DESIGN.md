@@ -2,22 +2,27 @@
 
 Owner: ui worker. Scope: everything under `src/media_forge/ui/`. The JS <-> Python contract is `docs/BRIDGE_API.md`;
 this document describes the material, the design system, the motion and the background of the page that codes
-against it. The material, the spring solver and several controls come from Media Saver
-(`D:\Projects\media-saver\docs\UI_DESIGN.md`, same design family); this document records what Media Forge uses and
+against it. The design system itself (tokens, fonts, material, springs, controls, overlays, toasts, title bar,
+background, the version pill with the update popover) is the shared Liquid UI kit, vendored at
+`src/media_forge/ui/vendor/liquid_ui/` (version in its `VENDORED.txt`); its owning document is
+`D:\Projects\_shared\liquid_ui\docs\LIQUID_UI.md`. This document records what Media Forge uses, its own screen and
 where it differs.
 
 ## 1. Sources
 
-| Source | Taken |
+| Part | From |
 |---|---|
-| Media Saver `ui/js/glass.js`, `motion.js`, `overlay.js` | Copied unchanged: SVG-displacement lenses, spring solver and WAAPI spring easing, sheets that grow out of their control. |
-| Media Saver `controls.js`, `toast.js`, `update.js`, `css/tokens.css`, `glass.css` | Adapted: Segmented (scroll variant, per-option disable, `destroy`), Switch (`setDisabled`, `destroy`), Stepper, Select (opens up or down), toasts, update popover (product name, no links), type roles and ink alphas. |
-| Frame Notes `ui/js/update.js` | The interval select and the status line next to the update actions (here in the settings sheet). |
-| Apple, WWDC25 "Meet Liquid Glass"; kube.io refraction article | As in Media Saver: lensing rather than scattering, materialize by ramping the lensing, controls lift into glass only while touched, tint only the primary action, scroll edge effect instead of hard clipping. |
+| `vendor/liquid_ui/css/` tokens, base, scene, glass, components | The kit, unchanged (synced copy; never edited here). Fonts in `vendor/liquid_ui/fonts/`, named only in the kit's `tokens.css`. |
+| `vendor/liquid_ui/js/` motion, glass, overlay, controls, toast, background, icons, format, update | The kit, unchanged: springs, lenses, sheets and popovers, Segmented / Switch / Stepper / Select / Slider, toasts, the scene, line icons, en-US formatting, `mountUpdateControl` (version pill, update popover, update toasts, the "Updates" rows of the settings sheet). |
+| `css/app.css`, `js/*.js`, `assets/icon.svg` | Media Forge: screen layout, file cards, settings panels, footer and Start pill, empty state, drop veil, status banner, settings sheet content, store, bridge wrapper, mock, app glyph, app tokens (kind colours, footer height), scene colour fields. |
+| Apple, WWDC25 "Meet Liquid Glass"; kube.io refraction article | Through the kit: lensing rather than scattering, materialize by ramping the lensing, controls lift into glass only while touched, tint only the primary action, scroll edge effect instead of hard clipping. |
+
+The kit started as this app's own UI (which took its material, springs and several controls from Media Saver); it
+moved into `_shared` without a visual change.
 
 ## 2. Material
 
-### 2.1 Lens — `js/glass.js`, `css/glass.css`
+### 2.1 Lens — kit `js/glass.js`, `css/glass.css`
 
 `new Lens(el, preset)` builds one SVG filter per element: `feGaussianBlur -> feDisplacementMap -> feColorMatrix`,
 applied with `backdrop-filter: url(#lgN) <preset css>`; the displacement map is a convex squircle bezel traced with
@@ -55,10 +60,15 @@ the FFmpeg banner and the menus (menus use a near-opaque tint).
 - Legibility: white ink in alpha steps, a 1 px text shadow on lenses, `--well` under inputs and long text.
 - `prefers-reduced-transparency`: near-opaque tints, glass-lite without blur. `prefers-contrast: more`: solid rims.
 
-## 3. Tokens — `css/tokens.css`
+## 3. Tokens — kit `css/tokens.css`, app `css/app.css`
 
-- Fonts embedded in `assets/fonts` (no network): `InterVariable.woff2` (Inter 4, OFL), `GeistMono-Variable.woff2`
-  (Geist Mono, OFL), licences beside them. Inter features `cv05`, `ss03` through `--ff-feat`; mono without ligatures.
+The kit's tokens are the values below (its defaults are this app's identity, so Media Forge overrides none of
+them); `css/app.css` adds the app tokens: kind colours `--k-video`, `--k-image`, `--k-audio` and `--foot-h`.
+
+- Fonts embedded in the kit's `fonts/` (no network): `InterVariable.woff2` (Inter 4, OFL), `GeistMono-Variable.woff2`
+  (Geist Mono, OFL), licences beside them. The text face is named in one place (the kit's `@font-face` block and
+  `--font-text`); the page has no font preload links. Inter features `cv05`, `ss03` through `--ff-feat`; mono
+  without ligatures.
 - Type roles (`--t-*` with tracking `--tr-*`): display 650 22, title 630 19, headline 630 15, card 560 14, body 450
   13.5, callout 450 13, control 560 13 / 12.5 / 12, meta 470 12 (tabular), caption 520 11.5, micro 600 10.5, mono
   12.5 / 12 / 11. Every number that changes in place is `tabular-nums`.
@@ -70,7 +80,7 @@ the FFmpeg banner and the menus (menus use a near-opaque tint).
 - Radii 6 / 10 / 14 / 18 / 22 / 28 / 34 / pill; spacing on a 4 pt grid; shadows s / m / l.
 - Layout: `--gutter clamp(14px, 3vw, 20px)`, `--titlebar-h 50px`, `--foot-h 56px`.
 
-## 4. Motion — `js/motion.js`
+## 4. Motion — kit `js/motion.js`
 
 One spring solver (semi-implicit Euler, 240 Hz sub-steps, `response` / `damping`), one shared rAF ticker that runs only
 while a spring moves, and `springEasing` / `springAnimate` for compositor animations with a CSS `linear()` easing.
@@ -106,9 +116,11 @@ Behaviours:
 - `prefers-reduced-motion`: springs critically damped and short, no CSS loops (scene, sheens, bobbing, pulse), no
   drawer or insert animation, the speck canvas stops.
 
-## 5. Background — `js/background.js`, `css/scene.css`
+## 5. Background — kit `js/background.js`, `css/scene.css`
 
-The starting point was a plain vertical gradient from black to deep navy. It stays the base; five layers give it depth.
+The starting point was a plain vertical gradient from black to deep navy. It stays the base; five layers give it
+depth. `js/main.js` passes the four colour fields below as `initBackground(#scene, { fields })` (the kit's other
+options keep their defaults).
 
 | # | Layer | Technique | Cost |
 |---|---|---|---|
@@ -132,20 +144,21 @@ lenses re-filter their small backdrop each frame (4 steady surfaces).
 
 | File | Content |
 |---|---|
-| `index.html` | Static layout: scene, lens defs, list scroller (FFmpeg banner, list, empty state), scroll edges, title bar (drag region, brand, version pill, window cluster), footer (counters capsule, Start), overlay hosts (update popover, settings sheet), drop veil, toasts. |
-| `css/tokens.css`, `base.css`, `scene.css`, `glass.css`, `components.css`, `app.css` | Tokens; reset and buttons; background; material; controls, overlays, toasts, settings rows; screen layout. |
-| `assets/icon.svg`, `assets/fonts/` | App glyph (isometric block with an ember spark); embedded fonts and licences. |
-| `js/main.js` | Boot, title bar, empty state, FFmpeg banner, paste of copied paths (`add_files`), keyboard, entrance, `toast` / `window` / `capabilities` events, error reporting through `log`. |
+| `index.html` | Static layout: scene, lens defs, list scroller (FFmpeg banner, list, empty state), scroll edges, title bar (drag region, brand, version pill, window cluster), footer (counters capsule, Start), overlay hosts (update popover, settings sheet), drop veil, toasts. Links the kit's five stylesheets, then `css/app.css`. |
+| `vendor/liquid_ui/` | The kit (section 1): `css/` tokens, base, scene, glass, components (controls, overlays, update popover, menus, toasts, settings sheet rows, title bar); `js/`; `fonts/`; `VENDORED.txt`. |
+| `css/app.css` | App tokens and the screen: scroll area and edges, status banner, cards, drawer and panels, footer and Start pill, empty state, drop veil, size limit field, settings sheet content (output path, defaults panel, engine rows, about line). |
+| `assets/icon.svg` | App glyph (isometric block with an ember spark). |
+| `js/main.js` | Boot, scene fields, title bar, empty state, FFmpeg banner, the kit's update control (`mountUpdateControl`, store `update`), paste of copied paths (`add_files`), keyboard, entrance, `toast` / `window` / `capabilities` events, error reporting through `log`. |
 | `js/api.js` | `window.mediaForge.dispatch` (registered at import, before `ready()`), event queue until `goLive()`, pywebview wait (1.5 s) or mock, `call()`, `on()`, `reportError()`. |
 | `js/mock.js` | Full mock of BRIDGE_API (section 7). |
 | `js/store.js` | Confirmed state (version, settings, caps, options, update, items) and watchers; `gpuFor(codec)`. |
-| `js/list.js` | File cards, state lines, drawer with the settings panel, Apply to all, Remove, Retry, Show in folder, Open, Cancel; events `item`, `items_added`, `item_removed`. |
+| `js/list.js` | File cards, state lines, the trash button of a collapsed card, drawer with the settings panel, Apply to all, Remove, Retry, Show in folder, Open, Start now, Cancel; events `item`, `items_added`, `item_removed`. |
 | `js/panels.js` | `SettingsPanel` per kind (video / image / audio) and `planSummary`; used by cards and by the settings defaults. |
 | `js/footer.js` | Counters capsule (add, counts, size change, Clear split menu, Stop), Start morph, `batch_done`. |
-| `js/settings.js` | Settings sheet: output, processing, defaults per kind, engine (capabilities), updates. |
-| `js/update.js` | Version pill, update popover, update toasts, `restart()` with the running-files warning. |
+| `js/settings.js` | Settings sheet: output, processing, defaults per kind, engine (capabilities); the "Updates" group is filled by the kit's `update.mountSettings()`. |
 | `js/dropzone.js` | Window-wide drop veil and ripple; mock drops. |
-| `js/controls.js`, `js/overlay.js`, `js/toast.js`, `js/glass.js`, `js/motion.js`, `js/background.js`, `js/sound.js`, `js/icons.js`, `js/format.js` | Controls, sheets, toasts, material, springs, scene, finish chime, line icons and glyph, en-US formatting. |
+| `js/sound.js` | Finish chime. |
+| `js/icons.js`, `js/format.js` | The kit's `icon()` plus `KIND_ICON` and the app glyph; the kit's formatting plus file counts, codec names, channels, sample rates, kind labels. |
 
 ### 6.1 Layout (3:4, 540 x 720 to 630 x 840 and up)
 
@@ -161,13 +174,16 @@ lenses re-filter their small backdrop each frame (4 steady surfaces).
   the first files arrive.
 - Card: 64 x 48 thumbnail (56 x 44 below 600 px), name, kind chip (Video / Photo / Audio; none for a file that could
   not be read), probe line (`1920×1080 · 1:12 · H.264 · 46.8 MB`; audio `3:41 · AAC · 48 kHz · Stereo · 8.4 MB`), and
-  one state line:
+  one state line. On the right of the head: a trash button (28 px round, `--rose` icon on the quiet `--fill-1`,
+  rose-tinted fill on hover and press, gel press, tooltip "Remove"; `remove_item(id)`, which also cancels a running
+  file) while the card is collapsed (hidden, its space kept, while the panel is open: the panel has "Remove"), then
+  the chevron.
 
   | Status | State line | Actions |
   |---|---|---|
   | probing | skeleton bar, "Reading file…" (thumbnail sheen) | |
   | ready | arrow + plan summary ("MP4 · H.264 · Quality 70 · GPU", "MKV · H.264 · ≤ 25 MB · 2×", "MP3 · 192 kbps") | |
-  | queued | "Queued" | Cancel |
+  | queued | "Queued" | Start now (`start_now(id)`: runs the file at once on an extra worker beside the running ones, ignoring "Files at the same time"; a `false` answer shows "The file could not be started."), Cancel |
   | running | stage ("Encoding", "Pass 1 of 2", "Upscaling", "Downloading model", "Retrying to fit the size limit", …), percent, speed · ETA, liquid fill | × (Cancel) |
   | done | `9.1 MB · 19 %` (+ the new resolution when it changed) | Show in folder, Open, Run again (`start([id])`: a new numbered output, the old file stays); the actions wrap to their own line when the row is too narrow |
   | error | the message (2 lines) | Retry (`start([id])`, only when the file was read) |
@@ -198,23 +214,21 @@ patch}})` for the defaults. The panel applies the change locally until the answe
 (normalised) settings; a refusal shows the sentence as a toast and restores the last confirmed values. A sequence
 number drops stale answers; item events do not move a panel while its own patch is in flight.
 
-### 6.3 Update states (UpdateStatus.stage)
+### 6.3 Updates (UpdateStatus.stage)
 
-| Stage | Pill | Popover sub-line | Action |
-|---|---|---|---|
-| idle | `v1.0.0` | "Updates come from GitHub Releases" | Check for updates |
-| checking | | "Checking for updates…" + indeterminate bar | Checking… (disabled) |
-| up_to_date | | "You have the latest version" | Check for updates |
-| available | accent + dot | "Version X is available", rows Installed / Latest (size, date), release notes | Download (tinted) |
-| downloading | pulsing dot | "Downloading version X…", bar, "42%" and "5.1 MB of 12.1 MB" | Downloading… (disabled) |
-| ready | mint dot | "Version X is ready to install", Latest tagged "downloaded" | Restart to update (tinted; disabled when `can_apply` is false) |
-| error | | the message in a rose box | Try again (repeats the interrupted step) |
+The version pill, the update popover, the update toasts and the "Updates" rows of the settings sheet are the kit's
+update control (`mountUpdateControl`; stages, copy and behaviour in LIQUID_UI.md, section 7; its bridge contract,
+section 8, matches BRIDGE_API sections 2, 3.5, 3.7, 3.8 and 4). Media Forge passes: product "Media Forge", the
+State's version, update status, settings and `Options.update_intervals`, the restart warning "Files in progress stop
+when the app restarts" (shown with "Restart anyway" while files are queued or running), `onStatus` (store `update`)
+and `onSettings` (store `settings`); `js/main.js` forwards every confirmed `settings` to `setSettings`.
 
-The first `available` of a version raises one toast with "View" (not when automatic download is on: the shell
-downloads by itself, ARCHITECTURE 5.7). `ready` raises one sticky toast with "Restart". Restart with files queued or
-running shows "Files in progress stop when the app restarts" + "Restart anyway" first. The page never downloads or
-restarts on its own. Release notes Markdown: escaped first; headings, bullets, paragraphs, bold, code and
-`[text](https://...)` links, opened in the default browser through `open_url` (a toast when it returns false).
+In short: idle / up_to_date "Check for updates"; checking with an indeterminate bar; available with Installed /
+Latest rows, release notes and a tinted "Download"; downloading with a bar, percent and sizes; ready with a tinted
+"Restart to update" (disabled when `can_apply` is false); error with the message and "Try again". The first
+`available` of a version raises one toast with "View" (not when automatic download is on: the shell downloads by
+itself, ARCHITECTURE 5.7); `ready` one sticky toast with "Restart". The page never downloads or restarts on its own.
+Release-note links open in the default browser through `open_url`.
 
 ### 6.4 Keyboard
 
@@ -233,14 +247,17 @@ open card; arrows move segmented selections; Ctrl+V of copied Windows paths (out
   `nvenc=0` (no NVIDIA GPU: GPU options disabled), `ffmpeg=downloading` (banner, Start waits). The mock persists
   settings in `localStorage` (`media-forge.mock.settings`), probes in 300-900 ms with generated thumbnails, runs jobs
   with plausible stages / speed / ETA, fails one job in ten, mimics size limits, implements normalisation exactly as
-  BRIDGE_API 3.4, re-queues `error` (read) and `done` items in `start([id])` with a new numbered output name, opens
+  BRIDGE_API 3.4, re-queues `error` (read) and `done` items in `start([id])` with a new numbered output name, starts an
+  item at once in `start_now(id)` (a queued one leaves the queue; the parallel limit is ignored), opens
   `open_url` links with `window.open`, and cycles the update status on demand (manual check finds 0.2.0; Download;
   Restart).
 - Mock-only hook: `_simulate_drop(files)` (underscored, not part of the contract): browser drops become items by name
   through the `items_added` event, like the shell's drop listener.
 - Bridge expectations the page relies on (BRIDGE_API): `window.mediaForge.dispatch(name, payload)` is the only hook;
   `item` events may arrive for ids the page has not seen (they create the card); `start(ids)` returns the queued ids.
-- The page makes no network request: fonts and icons are local, thumbnails are data URLs.
+- The page makes no network request: fonts (the kit's `fonts/`) and icons are local, thumbnails are data URLs.
+- The kit copy is updated only by syncing the master (`vendor-sync.ps1 -Lib liquid_ui -Project media-forge`); a fix
+  made in the copy is ported to the master the same day.
 - Screenshots of a hidden browser pane: rAF and WAAPI pause there, so springs and entrances hold their first frame;
   finish finite animations first (`document.getAnimations().forEach(a => a.finish())`).
 - Every lens owns one `<filter>`; panels, toasts and controls destroy their lenses when removed.
@@ -252,7 +269,7 @@ open card; arrows move segmented selections; Ctrl+V of copied Windows paths (out
 
 - Neutral and factual (`_workspace/CONVENTIONS.md`, "UI copy"): say what a control does or what happened, no filler,
   no exclamation marks. English (US), sentence case: "Choose files", "Start", "Clear done", "Show in folder", "Open",
-  "Retry", "Apply to all video", "Remove", "Check for updates", "Restart to update", "Try again".
+  "Retry", "Apply to all video", "Remove", "Start now", "Cancel", "Check for updates", "Restart to update", "Try again".
 - The bridge's kind `image` reads as "Photo" (chip), "photos" (Apply to all photos, counts). Format and codec labels
   are shown exactly as `Options` gives them; summaries shorten "MP3 · audio only" to "MP3".
 - Plurals through `plural()` / `nFiles()` / `nKind()`; sizes in B / KB / MB / GB, percentages with a no-break space

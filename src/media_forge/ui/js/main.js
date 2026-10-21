@@ -2,18 +2,57 @@
 
 import { connect, call, on, goLive, backendMode, reportError } from './api.js';
 import { store, notify, watch } from './store.js';
-import { initBackground, setFocused } from './background.js';
-import { initLight, gel, Lens } from './glass.js';
-import { SPRINGS, springAnimate, reducedMotion } from './motion.js';
-import { topOverlay } from './overlay.js';
+import { initBackground, setFocused } from '../vendor/liquid_ui/js/background.js';
+import { initLight, gel, Lens } from '../vendor/liquid_ui/js/glass.js';
+import { SPRINGS, springAnimate, reducedMotion } from '../vendor/liquid_ui/js/motion.js';
+import { topOverlay } from '../vendor/liquid_ui/js/overlay.js';
 import { icon, appGlyph } from './icons.js';
-import { initToasts, toast } from './toast.js';
+import { initToasts, toast } from '../vendor/liquid_ui/js/toast.js';
 import { initList, addItems, removeItem, focusedCardId, collapseExpanded, getItems } from './list.js';
 import { initFooter, pickFiles, start, footerMenuOpen } from './footer.js';
 import { initSettings } from './settings.js';
-import { initUpdate } from './update.js';
+import { mountUpdateControl } from '../vendor/liquid_ui/js/update.js';
 import { initDropzone } from './dropzone.js';
 import { initSound } from './sound.js';
+
+// Scene colour fields of Media Forge (cobalt, teal, violet, a faint ember); docs/UI_DESIGN.md 5.
+const SCENE_FIELDS = [
+  { c: '#2f62ff', x: 18, y: 38, s: 92, a: 0.46, d: 58, anim: 'drift-a' },
+  { c: '#12b8b0', x: 86, y: 78, s: 84, a: 0.3, d: 72, anim: 'drift-b' },
+  { c: '#7a48ff', x: 78, y: 26, s: 70, a: 0.3, d: 46, anim: 'drift-c' },
+  { c: '#ff8a4a', x: 12, y: 92, s: 58, a: 0.12, d: 78, anim: 'drift-d' },
+];
+
+/** Version pill, update popover and toasts from the kit; the store keeps the last status. */
+function initUpdate(state) {
+  const busy = () => getItems().some((i) => i.status === 'running' || i.status === 'queued');
+  const ctl = mountUpdateControl({
+    pill: document.getElementById('ver-pill'),
+    popoverHost: document.getElementById('update-pop'),
+    call,
+    on,
+    options: {
+      product: 'Media Forge',
+      version: state.version || '',
+      status: state.update || null,
+      settings: state.settings,
+      intervals: (state.options && state.options.update_intervals) || [],
+      hasActiveWork: busy,
+      restartWarning: 'Files in progress stop when the app restarts',
+      onStatus: (u) => {
+        store.update = u;
+        notify('update', u);
+      },
+      onSettings: (s) => {
+        store.settings = s;
+        notify('settings', s);
+      },
+    },
+  });
+  // Settings confirmed elsewhere (the `settings` event, the sheet's own saves) reach the control.
+  watch('settings', (s) => ctl.setSettings(s));
+  return ctl;
+}
 
 function initTitlebar() {
   document.getElementById('tb-glyph').innerHTML = appGlyph(22);
@@ -141,7 +180,7 @@ function entrance() {
 }
 
 async function boot() {
-  initBackground();
+  initBackground(document.getElementById('scene'), { fields: SCENE_FIELDS });
   initLight();
   initToasts();
   initTitlebar();
@@ -160,12 +199,12 @@ async function boot() {
   store.caps = state.capabilities || null;
   store.settings = state.settings;
 
-  initSettings(state);
+  const update = initUpdate(state);
+  initSettings(state, update);
   initList(state);
   initFooter();
   initEmpty();
   initCapsBanner();
-  initUpdate(state, { activeJobs: () => getItems().some((i) => i.status === 'running' || i.status === 'queued') });
   initDropzone();
   initSound();
   initPastePaths();

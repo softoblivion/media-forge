@@ -7,8 +7,8 @@
 // expands from the pointer on dragenter, and the drop target pulses once on drop.
 
 import { mockHooks } from './api.js';
-import { Lens } from './glass.js';
-import { SPRINGS, reducedMotion } from './motion.js';
+import { Lens } from '../vendor/liquid_ui/js/glass.js';
+import { SPRINGS, reducedMotion } from '../vendor/liquid_ui/js/motion.js';
 import { icon } from './icons.js';
 
 let veil;

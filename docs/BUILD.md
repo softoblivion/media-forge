@@ -74,7 +74,7 @@ Shell tests never open a window:
 | `test_shell_bridge.py` | public names = exactly BRIDGE_API.md 2 (and the parameter names pywebview sees), delegation to the engine, argument checks, error sentences, settings refusals (3.5 sentences, settings re-sent), dialogs and their filters, minimize / close, focus events, shutdown, the drop listener, self-update wiring (check, download, apply closes the window, auto download, interval change) |
 | `test_shell_drop.py` | `pywebviewFullPath` extraction, one-level folder expansion to media files, the extension table against `CORE.md` 2 and the core's `detect_kind` |
 | `test_shell_selfupdate.py` | the `core\selfupdate.py` adapter: repository, asset, names, environment variable, exe path when frozen, scheduler, `--apply-update` routed before the mutex |
-| `test_shell_winutil.py` | aspect-lock arithmetic of the window procedure hook (every edge and corner, minimum, work-area maximum, start size) as pure functions |
+| `test_shell_winutil.py` | size ladder against work areas, centring, the DWM border `COLORREF`, the hook and DWM helpers without a window, no resize code left |
 | `test_shell_main.py` | arguments, UI folder (source and frozen), port range, data paths, single instance |
 
 `tests\shell_fake_engine.py` is the stand-in engine used by these tests and by `--fake`.
@@ -125,28 +125,30 @@ must run from the same path, `MediaForge.exe.old` must be gone within about 15 s
 
 ## 6. Window notes
 
-- Frameless WinForms form; `shell\winutil.FramelessResizeHook` subclasses its window procedure: `WS_THICKFRAME`
-  (system resize border, DWM shadow), `WM_NCCALCSIZE` keeps the whole window as client area except the invisible
-  side / bottom borders, `WM_SIZING` locks the page viewport to 3:4 (the dragged edge wins, the opposite edges
-  stay), `WM_WINDOWPOSCHANGING` keeps 3:4 for every other size change, `WM_GETMINMAXINFO` sets the 540 x 720
-  minimum, `WS_MAXIMIZEBOX` is cleared and `SC_MAXIMIZE` / non-client double-clicks are swallowed; a maximize that
-  still happens is undone at once (`maximized` event).
-- The top edge: the WebView2 child window receives every mouse message over the page, so the form keeps a 4 px
-  strip (`main.TOP_GRIP`, form `Padding`) above the page that answers `WM_NCHITTEST` with `HTTOP` / `HTTOPLEFT` /
-  `HTTOPRIGHT`. The page viewport is the client area minus that strip.
-- Start size 630 x 840 logical px, fitted into the work area of the monitor (aspect kept), centred.
+- Fixed size (`ARCHITECTURE.md` 7): `create_window(resizable=False, frameless=True)`; pywebview first makes the form
+  `FixedSingle` and then borderless, which keeps the client size and leaves a 614 x 801 window at 96 dpi, so the
+  shell sets the real size itself after the form is shown.
+- `shell\winutil.FixedSizeHook` subclasses the window procedure: `WM_WINDOWPOSCHANGING` replaces every size of
+  the restored window with the locked one (a `SetWindowPos` from another program cannot resize it),
+  `SC_MAXIMIZE` is swallowed, a `SIZE_MAXIMIZED` that still arrives (`ShowWindow(SW_MAXIMIZE)` from outside) is
+  undone with `SC_RESTORE`, `WS_MAXIMIZEBOX` / `WS_THICKFRAME` are cleared and `WS_MINIMIZEBOX` is set (taskbar
+  click minimizes). Without these, the borderless form keeps the `WS_MAXIMIZEBOX` bit and fills the work area on
+  `SC_MAXIMIZE` (measured with pywebview 6.2.1).
+- Size: the first of 630 x 840, 600 x 800, 570 x 760, 540 x 720 logical px (`main.SIZE_LADDER`) that fits the
+  monitor work area at the window's DPI, centred. The process is system-DPI aware (pywebview calls
+  `SetProcessDPIAware`), so the window gets no `WM_DPICHANGED`.
+- DWM: rounded corners (`DWMWA_WINDOW_CORNER_PREFERENCE`) and the border colour `DWMWA_BORDER_COLOR` = the page
+  background `#04070f`, so the light Windows 11 frame line is gone; the page covers the whole client area.
+- Drag regions (`pywebview-drag-region`) move the window from JavaScript (`window.move`, no size change); a
+  double-click there is a plain DOM event and never maximizes.
+- Checked with a CDP launcher and a Win32 probe (`GetWindowRect`): start 630 x 840, `SetWindowPos` to 1000 x 600
+  stays 630 x 840, `SC_MAXIMIZE` / `ShowWindow(SW_MAXIMIZE)` / double-click on the title bar change nothing, six
+  minimize / restore cycles keep 630 x 840, the top screen row of the window is `#04070f`.
 
 ## 7. Troubleshooting
 
 Symptom / cause / fix entries specific to this project; cross-project ones go to
 `D:\Projects\_workspace\NOTES.md`.
-
-### The window got smaller after every minimize / restore
-- Symptom: each restore from the taskbar made the window smaller by the width of the resize borders.
-- Cause: after a restore WinForms re-applies the client size it stored as the window size of a borderless form; it
-  does not know about the frame added by the hook.
-- Fix: the hook remembers the last normal window size and replaces that exact request (and every size change while
-  minimized or restoring) with it (`FramelessResizeHook._on_pos_changing`).
 
 ### The frozen exe shows two processes
 - Symptom: Task Manager lists two `MediaForge.exe`; ending the first one leaves the window running.

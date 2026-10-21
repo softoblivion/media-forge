@@ -21,7 +21,7 @@ A Windows desktop utility, shipped as one portable `MediaForge.exe`, that takes 
 | Layer | Choice | Why |
 |---|---|---|
 | Window / UI host | pywebview 6.2.1, `edgechromium` backend (WebView2) | The workspace default (`_workspace\RECIPES.md`, section 4): Chromium is the only engine where `backdrop-filter: url(#svg-filter)` gives real refraction; WebView2 ships with Windows 11. |
-| UI | Plain HTML / CSS / JS (ES modules), no build step, no network, fonts embedded | Same as Media Saver and Frame Notes; the glass material and spring motion are reused from Media Saver's `ui/js/glass.js` and `motion.js`. |
+| UI | Plain HTML / CSS / JS (ES modules), no build step, no network, fonts embedded | Same as Media Saver and Frame Notes; the glass material, controls, background, fonts and the version / update popover come from the shared design kit `liquid_ui`, vendored as `ui/vendor/liquid_ui` (master in the workspace's `_shared`, docs `LIQUID_UI.md` there; never edited inside this repository). |
 | Backend | Python 3.14 | pywebview, pythonnet, PyInstaller, NumPy, Pillow and OpenCV all ship 3.14 wheels. |
 | Video / audio | `ffmpeg.exe` + `ffprobe.exe` as subprocesses: `media-forge_data\bin` first, then PATH, else downloaded once from yt-dlp/FFmpeg-Builds (`RECIPES.md`, section 3) | Every codec and container the app offers is one ffmpeg invocation; NVENC (H.264 / HEVC / AV1) is used when the machine has it. |
 | Images | Pillow (JPEG, PNG, WebP, AVIF, TIFF, BMP; HEIC through `pillow-heif` when importable) | AVIF is built into Pillow 11+ wheels; everything is in-process, no temp files. |
@@ -62,7 +62,8 @@ media-forge/
   src/media_forge/shell/main.py      entry: single instance, window (3:4, frameless), drop listener, lifecycle
   src/media_forge/shell/bridge.py    pywebview js_api class, event pump
   src/media_forge/shell/winutil.py   DWM corners, frameless resize with aspect lock, Explorer, message box, mutex
-  src/media_forge/ui/                index.html, css/, js/ (incl. js/mock.js), assets/ (icon, fonts)
+  src/media_forge/ui/                index.html, css/ (app tokens and app-only rules), js/ (incl. js/mock.js), assets/ (icon)
+  src/media_forge/ui/vendor/liquid_ui/ vendored design kit: css/, js/, fonts/ (synced by _tools\vendor-sync.ps1; VENDORED.txt)
   tests/                     unittest suite (test_core_*, test_shell_*)
   build/                     entry.py, MediaForge.spec, build.ps1, make_icon.py, icon.ico
   scripts/run_dev.bat        run from source
@@ -178,7 +179,7 @@ dot when a release is available), a popover with notes, Download / Restart butto
 | `remove_item(id)`, `clear(kind_of_clear)` | removes an item (cancels it when running) / removes `done`, `error` or all idle items |
 | `set_item_settings(id, patch)` | normalises and stores; returns the item |
 | `apply_to_kind(id)` | copies the item's settings to the other idle items of the same kind; returns the changed items |
-| `start_items(ids)` / `cancel(id)` / `cancel_all()` | queue control |
+| `start_items(ids)` / `start_now(id)` / `cancel(id)` / `cancel_all()` | queue control; `start_now` runs one item at once on an extra worker, ignoring `parallel_jobs` |
 | `get_settings()` / `set_settings(patch)` | global settings and per-kind defaults |
 | `capabilities()` | tools, encoders, models |
 | `options()` | the option tables of `BRIDGE_API.md`, 3.7 |
@@ -187,7 +188,9 @@ Events emitted by the engine: `item`, `item_removed`, `settings`, `capabilities`
 
 ## 7. Window
 
-Frameless, 3:4 portrait: start size 630 x 840 logical pixels (clamped to the work area, aspect kept), minimum
-540 x 720, resizable from every edge with the aspect ratio locked by the window-procedure hook (`WM_SIZING`),
-no maximize (it would break the aspect), minimize and close from the page's title bar, DWM rounded corners.
-Single instance by a named mutex; a second launch brings the window to the front.
+Frameless, 3:4 portrait, fixed size (global rule "Fixed window size by default", 2026-10-21; 1.0 was resizable
+with an aspect lock): 630 x 840 logical pixels, scaled down by whole steps that keep 3:4 when the monitor work
+area is smaller, not resizable (no sizing border, no size hook, no maximize), minimize and close from the page's
+title bar, DWM rounded corners, DWM border colour set to the page background (`DWMWA_BORDER_COLOR`) so no light
+frame line shows at the top. The page covers the whole client area (no resize strip). Single instance by a named
+mutex; a second launch brings the window to the front.

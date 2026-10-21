@@ -274,9 +274,15 @@ dropped by its worker when it stops; `item_removed` is sent at once).
 that have a probe (retry; a file that failed to probe cannot be started). Queuing resets `progress`, `stage`,
 `eta`, `speed`, `output` and `error`.
 
+`start_now(id)` (`JobQueue.start_now`, `Engine.start_now`) runs one item at once on an extra thread
+(`jobs-now-<job id>`) that ends with its job, outside `parallel_jobs` and the image lane: a `queued` item leaves the
+queue; `ready`, `done` and probed `error` items get the same reset as queuing and skip the `queued` state (one
+`item` event with `running`). `False` for an unknown, `probing` or `running` item, a failed probe, or while the
+queue is stopping. The job counts in `batch_done` like any other; `stop()` cancels and joins these threads too.
+
 Workers: `parallel_jobs` general threads (1..3, changed at runtime by `set_settings`) take the first queued item of
 any kind; one extra image-lane thread takes only image items, so a photo can run beside a video (at most
-`parallel_jobs + 1` running). The runner (`Engine._run_job`) gets a snapshot of the item and a `JobContext`; it
+`parallel_jobs + 1` running from the queue, plus any `start_now` jobs). The runner (`Engine._run_job`) gets a snapshot of the item and a `JobContext`; it
 reserves the output name, waits for ffmpeg when the kind needs it (cancel still works while waiting), runs the
 job, describes the output (`ffprobe` of the result for width, height and duration; image dimensions from the
 pipeline; `ratio` = output / source size), and in `finally` deletes the output when the job did not finish and

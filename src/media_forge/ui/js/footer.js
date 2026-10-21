@@ -7,11 +7,11 @@
 
 import { call, on } from './api.js';
 import { store, watch } from './store.js';
-import { Lens, gel } from './glass.js';
-import { Spring, SPRINGS, reducedMotion } from './motion.js';
+import { Lens, gel } from '../vendor/liquid_ui/js/glass.js';
+import { Spring, SPRINGS, reducedMotion } from '../vendor/liquid_ui/js/motion.js';
 import { icon } from './icons.js';
 import { bytes, nFiles, plural } from './format.js';
-import { toast } from './toast.js';
+import { toast } from '../vendor/liquid_ui/js/toast.js';
 import { addItems } from './list.js';
 
 let foot, stats, startBtn, startLens, statsLens;

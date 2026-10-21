@@ -1,7 +1,7 @@
 /* Background scene (js/background.js builds the layers). Bottom -> top:
    base gradient, colour fields, contour and caustic lines, rising specks (canvas), light sweep,
    vignette, grain. Every loop is a CSS animation of `transform` (compositor only); the parallax
-   wrappers move by a transform transition. docs/UI_DESIGN.md section 5. */
+   wrappers move by a transform transition. docs/LIQUID_UI.md, section 6. */
 
 #scene {
   position: fixed;
@@ -139,6 +139,7 @@
   animation-play-state: paused !important;
 }
 
+/* The page's own decorative loops (inside the app root `#app`) hold with the scene. */
 html.is-still #app * {
   animation-play-state: paused !important;
 }

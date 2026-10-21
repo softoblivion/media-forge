@@ -1,4 +1,4 @@
-"""Application entry point: single instance, logging, engine, bridge and the frameless 3:4 pywebview window.
+"""Application entry point: single instance, logging, engine, bridge and the fixed-size frameless 3:4 window.
 
     python -m media_forge.shell.main [--debug] [--fake] [--ui-dir PATH]
 
@@ -24,9 +24,10 @@ from media_forge.core.selfupdate import APPLY_FLAG, build_scheduler, build_updat
 WINDOW_TITLE = "Media Forge"
 MUTEX_NAME = "Local\\MediaForge.SingleInstance"
 BACKGROUND = "#04070f"
-START_SIZE = (630, 840)  # page viewport in logical pixels (3:4)
-MIN_SIZE = (540, 720)
-TOP_GRIP = 4  # logical pixels at the top edge left to the form for resizing (winutil.FramelessResizeHook)
+# Window = page viewport, logical pixels, 3:4, not resizable (ARCHITECTURE.md 7). The first size that fits the
+# monitor work area is used.
+SIZE_LADDER = ((630, 840), (600, 800), (570, 760), (540, 720))
+START_SIZE = SIZE_LADDER[0]
 HTTP_PORT_FIRST = 42101  # fixed port range keeps the page origin (and its localStorage) stable between launches
 HTTP_PORT_TRIES = 40
 LOG_NAME = "app.log"
@@ -218,10 +219,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         js_api=bridge,
         width=START_SIZE[0],
         height=START_SIZE[1],
-        min_size=MIN_SIZE,
         frameless=True,
         easy_drag=False,
-        resizable=True,
+        resizable=False,
         shadow=True,
         text_select=True,  # the UI decides where selection is allowed; pywebview's global user-select:none is off
         background_color=BACKGROUND,
@@ -277,8 +277,6 @@ def _wire_window_events(window: Any, bridge: Any, engine: Any) -> None:
     window.events.shown += on_shown
     window.events.loaded += on_loaded
     window.events.closing += on_closing
-    # A maximize that slipped through anyway (it would break the 3:4 aspect) is undone at once.
-    window.events.maximized += lambda: _on_ui_thread(window, lambda: _undo_maximize(window))
 
 
 def _on_ui_thread(window: Any, fn) -> None:
@@ -295,47 +293,29 @@ def _on_ui_thread(window: Any, fn) -> None:
     fn()
 
 
-def _undo_maximize(window: Any) -> None:
-    try:
-        window.restore()
-    except Exception:  # noqa: BLE001
-        log.debug("could not undo a maximize", exc_info=True)
-
-
 def _setup_native_window(window: Any, bridge: Any) -> None:
-    """On the UI thread after the form is shown: no maximize, DWM corners, edge resizing with the aspect lock, start
-    size fitted to the work area, focus tracking."""
+    """On the UI thread after the form is shown: fixed size fitted to the work area, no maximize, DWM corners and
+    border colour, focus tracking."""
     from . import winutil
 
     native = window.native
     if native is None:
         return
     try:
-        native.MaximizeBox = False  # before the hook: WinForms rebuilds the style bits when this changes
-    except Exception:  # noqa: BLE001
-        log.debug("could not clear MaximizeBox", exc_info=True)
-    try:
         hwnd = int(native.Handle.ToInt64())
         winutil.set_rounded_corners(hwnd)
-        scale = winutil.window_scale(hwnd)
-        grip = int(round(TOP_GRIP * scale))
-        try:
-            from System.Windows.Forms import Padding  # pythonnet
-
-            native.Padding = Padding(0, grip, 0, 0)  # the WebView2 control (Dock=Fill) leaves the top strip free
-        except Exception:  # noqa: BLE001
-            grip = 0
-            log.warning("top resize strip unavailable", exc_info=True)
-        hook = winutil.FramelessResizeHook(hwnd, min_client_size=MIN_SIZE, top_grip=grip)
+        winutil.set_border_color(hwnd, BACKGROUND)
+        hook = winutil.FixedSizeHook(hwnd)
         if hook.install():
             _keep_alive.append(hook)  # the ctypes callback must outlive the window
-            width, height = hook.start_client_size(START_SIZE, MIN_SIZE)
-            hook.set_client_size(width, height, apply=native.SetBounds)
-            log.info("window client %sx%s logical, scale %.2f, frame %s", width, height, scale, hook.nc)
+            width, height = hook.fit_size(SIZE_LADDER)
+            rect = hook.lock(width, height, apply=native.SetBounds)
+            log.info("window %sx%s logical, %sx%s physical, scale %.2f", width, height, rect[2], rect[3],
+                     winutil.window_scale(hwnd))
         else:
-            log.warning("edge resizing hook was not installed")
+            log.warning("fixed-size hook was not installed")
     except Exception:  # noqa: BLE001
-        log.exception("DWM / frame setup failed")
+        log.exception("DWM / window size setup failed")
     try:
         native.Activated += lambda *_: bridge._on_focus(True)
         native.Deactivate += lambda *_: bridge._on_focus(False)

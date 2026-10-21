@@ -259,6 +259,22 @@ class FakeEngine:
             self._emit("item", item)
         return queued
 
+    def start_now(self, item_id: str) -> bool:
+        """Runs the item at once beside the others (`advance` moves every running item)."""
+        self._record("start_now", item_id)
+        with self._lock:
+            item = self._item(item_id)
+            ok = item["status"] in ("queued", "ready", "done") or (item["status"] == "error"
+                                                                   and item["probe"] is not None)
+            if not ok:
+                return False
+            item.update(status="running", stage="encoding", progress=0.0, eta=None, speed=None, output=None,
+                        error=None)
+            self._running = True
+            snapshot = copy.deepcopy(item)
+        self._emit("item", snapshot)
+        return True
+
     def cancel(self, item_id: str) -> bool:
         self._record("cancel", item_id)
         with self._lock:
@@ -318,11 +334,12 @@ class FakeEngine:
             self.advance()
 
     def advance(self) -> None:
-        """One progress step of the first queued / running item (the thread calls it; tests may call it too)."""
+        """One progress step of every running item, or the start of the first queued one when none runs (the thread
+        calls it; tests may call it too)."""
         events = []
         with self._lock:
-            current = next((self._items[i] for i in self._order if self._items[i]["status"] == "running"), None)
-            if current is None:
+            running = [self._items[i] for i in self._order if self._items[i]["status"] == "running"]
+            if not running:
                 current = next((self._items[i] for i in self._order if self._items[i]["status"] == "queued"), None)
                 if current is None:
                     if self._running:
@@ -333,7 +350,7 @@ class FakeEngine:
                 else:
                     current.update(status="running", stage="encoding", progress=0.0)
                     events.append(("item", copy.deepcopy(current)))
-            else:
+            for current in running:
                 progress = min(1.0, round(current["progress"] + self.step, 4))
                 current.update(progress=progress, eta=round((1 - progress) / self.step * self.tick, 1),
                                speed="1.0x")

@@ -30,6 +30,7 @@ in `js/mock.js`) all code against it. A change here is a change for every worker
 | `set_item_settings(id, patch)` | `string, object` | `Item` | partial settings of that item's kind (3.3), normalised (3.4); refused for a running item ("The file is being processed.") |
 | `apply_to_kind(id)` | `string` | `Item[]` | copies the item's settings to every other idle item of the same kind; returns the changed items |
 | `start(ids)` | `string[] \| null` | `string[]` | queues these items in list order and returns the ids queued. Accepted states: `ready`, `error` (retry) and `done` (run again; a new numbered output file, the old one stays). `null` = every `ready` item |
+| `start_now(id)` | `string` | `boolean` | runs this item at once on an extra worker, ignoring `parallel_jobs`: a `queued` item leaves the queue and starts; a `ready`, `error` or `done` item starts straight away (same reset as `start`); `false` for a `running` or `probing` item |
 | `cancel(id)` | `string` | `boolean` | cancels a queued or running item (back to `ready`) |
 | `cancel_all()` | | `number` | items cancelled |
 | `get_settings()` | | `Settings` | |
@@ -39,7 +40,7 @@ in `js/mock.js`) all code against it. A change here is a change for every worker
 | `open_path(path)` | `string` | `boolean` | opens a file or folder with the shell default |
 | `open_url(url)` | `string` | `boolean` | opens an `https://` link in the default browser (release notes); anything else returns `false` |
 | `capabilities()` | | `Capabilities` | current tool / encoder / model status (also in `State` and the `capabilities` event) |
-| `window_minimize()` / `window_close()` | | `null` | title-bar buttons; there is no maximize (3:4 aspect lock) |
+| `window_minimize()` / `window_close()` | | `null` | title-bar buttons; there is no maximize (fixed window size) |
 | `update_status()` | | `UpdateStatus` | self-update status |
 | `check_updates()` | | `UpdateStatus` | background check (ignored while one runs); `update` events follow |
 | `download_update()` | | `UpdateStatus` | downloads the release found by the last check |
