@@ -1,10 +1,11 @@
 // Shared page state: what the bridge last confirmed (State, events). Components read from here
 // and subscribe to the keys they show; only the module that owns a key writes it:
 //   items        js/list.js      (item, item_removed, items_added events, method results)
-//   settings     js/settings.js  (settings event, set_settings results)
+//   settings     js/settings.js  (settings event, set_settings results; the kit's update rows
+//                                 report their saves through main.js onSettings)
 //   caps         js/main.js      (capabilities event)
 //   options      js/main.js      (State only; the option tables never change at runtime)
-//   update       js/update.js    (update event)
+//   update       js/main.js      (the kit's update control, onStatus of the update event)
 
 export const store = {
   version: '',

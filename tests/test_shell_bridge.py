@@ -130,13 +130,13 @@ class ContractSurfaceTest(unittest.TestCase):
     def test_public_names_are_exactly_the_contract(self):
         public = sorted(n for n in dir(Bridge) if not n.startswith("_"))
         self.assertEqual(public, sorted(CONTRACT_METHODS))
-        self.assertEqual(len(CONTRACT_METHODS), 24)
+        self.assertEqual(len(CONTRACT_METHODS), 25)
 
     def test_parameter_names_visible_to_pywebview(self):
         expected = {
             "ready": [], "add_files": ["paths"], "pick_files": [], "remove_item": ["id"], "clear": ["what"],
-            "set_item_settings": ["id", "patch"], "apply_to_kind": ["id"], "start": ["ids"], "cancel": ["id"],
-            "cancel_all": [], "get_settings": [], "set_settings": ["patch"], "pick_output_dir": [],
+            "set_item_settings": ["id", "patch"], "apply_to_kind": ["id"], "start": ["ids"], "start_now": ["id"],
+            "cancel": ["id"], "cancel_all": [], "get_settings": [], "set_settings": ["patch"], "pick_output_dir": [],
             "reveal": ["path"], "open_path": ["path"], "open_url": ["url"], "capabilities": [], "window_minimize": [],
             "window_close": [], "update_status": [], "check_updates": [], "download_update": [],
             "apply_update": [], "log": ["level", "message"],
@@ -193,6 +193,16 @@ class DelegationTest(BridgeTestBase):
         item = self.bridge.add_files([a])[0]
         self.assertEqual(self.bridge.start([item["id"]]), [item["id"]])
         self.assertEqual(self.engine.calls[-1], ("start_items", ([item["id"]],)))
+
+    def test_start_now_delegates_and_refuses_running(self):
+        item = self.bridge.add_files([self.touch("a.mp4")])[0]
+        self.assertTrue(self.bridge.start_now(item["id"]))
+        self.assertEqual(self.engine.calls[-1], ("start_now", (item["id"],)))
+        self.assertEqual(self.engine.state()["items"][0]["status"], "running")
+        self.assertFalse(self.bridge.start_now(item["id"]))
+        with self.assertRaises(BridgeError) as ctx:
+            self.bridge.start_now(None)
+        self.assertEqual(str(ctx.exception), "The file is no longer in the list.")
 
     def test_apply_to_kind(self):
         paths = [self.touch(f"{n}.mp4") for n in "abc"]

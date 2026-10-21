@@ -1,20 +1,22 @@
 // File list: one `.glass-lite` card per item (any number of them; no lenses on cards).
 //
 // A card shows the thumbnail, name, kind chip, the probe line (resolution · duration · codec ·
-// size) and one state line: the plan (ready), Queued, stage / percent / speed / ETA over a liquid
-// fill (running), output size and ratio with Show in folder / Open (done), the message with Retry
-// (error). Clicking a card expands it (spring height) into its settings panel (js/panels.js);
+// size) and one state line: the plan (ready), Queued with Start now (start_now) and Cancel, stage /
+// percent / speed / ETA over a liquid fill (running), output size and ratio with Show in folder /
+// Open (done), the message with Retry (error). The head carries a trash button (remove_item, which
+// also cancels a running file) while the card is collapsed, then the chevron.
+// Clicking a card expands it (spring height) into its settings panel (js/panels.js);
 // one card is expanded at a time, and the panel is built on expand and destroyed on collapse, so
 // its droplet lenses exist only while it is open.
 
 import { call, on, emit } from './api.js';
 import { store, notify } from './store.js';
 import { SettingsPanel, planSummary } from './panels.js';
-import { springAnimate, springEasing, SPRINGS, whenDone, reducedMotion } from './motion.js';
-import { gel } from './glass.js';
+import { springAnimate, springEasing, SPRINGS, whenDone, reducedMotion } from '../vendor/liquid_ui/js/motion.js';
+import { gel } from '../vendor/liquid_ui/js/glass.js';
 import { icon, KIND_ICON } from './icons.js';
 import { bytes, duration, codecName, sampleRate, channelsName, eta, percent, escapeHtml, KIND_LABEL, KIND_ALL, nKind } from './format.js';
-import { toast } from './toast.js';
+import { toast } from '../vendor/liquid_ui/js/toast.js';
 
 const EXPAND = { response: 0.46, damping: 0.86 };
 const STAGE = {
@@ -117,7 +119,10 @@ function createCard(it) {
         <div class="card-meta tnum"></div>
         <div class="card-state"></div>
       </div>
-      <button type="button" class="icon-btn card-exp" data-act="toggle" aria-expanded="false" aria-label="File settings">${icon('chevronDown')}</button>
+      <div class="card-tools">
+        <button type="button" class="icon-btn card-del" data-act="remove" aria-label="Remove" title="Remove">${icon('trash')}</button>
+        <button type="button" class="icon-btn card-exp" data-act="toggle" aria-expanded="false" aria-label="File settings">${icon('chevronDown')}</button>
+      </div>
     </div>
     <div class="card-drawer" hidden></div>
     <span class="lg-rim" aria-hidden="true"></span>`;
@@ -128,9 +133,11 @@ function createCard(it) {
     meta: el.querySelector('.card-meta'),
     state: el.querySelector('.card-state'),
     exp: el.querySelector('.card-exp'),
+    del: el.querySelector('.card-del'),
     drawer: el.querySelector('.card-drawer'),
     liquid: el.querySelector('.card-liquid'),
   };
+  gel(parts.del);
   return { el, parts, item: null, panel: null, stateKey: '' };
 }
 
@@ -219,7 +226,7 @@ function renderState(c, it) {
         s.innerHTML = `<span class="st-plan">${icon('arrow')}<span>${escapeHtml(planSummary(it.kind, it.settings))}</span></span>`;
         break;
       case 'queued':
-        s.innerHTML = `<span class="st-wait">${icon('clock')}<span>Queued</span></span><button type="button" class="btn btn-xs btn-ghost st-btn" data-act="cancel">Cancel</button>`;
+        s.innerHTML = `<span class="st-wait">${icon('clock')}<span>Queued</span></span><span class="st-acts"><button type="button" class="btn btn-xs st-btn" data-act="start-now" title="Start this file now, outside the queue">${icon('play')}<span>Start now</span></button><button type="button" class="btn btn-xs btn-ghost st-btn" data-act="cancel">Cancel</button></span>`;
         break;
       case 'running':
         s.innerHTML = `<span class="st-run"><span class="st-stage"></span><b class="st-pct tnum"></b></span><span class="st-speed tnum"></span><button type="button" class="icon-btn st-x" data-act="cancel" aria-label="Cancel" title="Cancel">${icon('x')}</button>`;
@@ -425,6 +432,8 @@ async function onClick(e) {
         return toggle(id);
       case 'cancel':
         return call('cancel', id).catch(fail);
+      case 'start-now':
+        return call('start_now', id).then((ok) => ok || toast('error', 'The file could not be started.')).catch(fail);
       case 'reveal':
         return it.output && call('reveal', it.output.path).catch(fail);
       case 'open':

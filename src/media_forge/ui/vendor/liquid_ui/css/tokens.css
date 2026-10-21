@@ -1,23 +1,30 @@
-/* Design tokens: fonts, type roles, colours, radii, spacing, shadows, motion.
-   The single source of these values; docs/UI_DESIGN.md section 3. */
+/* Liquid UI design tokens: fonts, type roles, inks, fills, identity colours, tints, radii,
+   spacing, shadows, CSS transitions, layout. The single source of these values
+   (docs/LIQUID_UI.md, section 3). An app overrides identity tokens in its own :root rule, loaded
+   after this file; it never edits a vendored copy. */
 
-/* Embedded fonts (SIL OFL 1.1, licences next to the files in assets/fonts). No network at runtime. */
+/* ---- Text face ------------------------------------------------------------------------------
+   The ONE place that names the text font: this @font-face block, --font-text and its features
+   --ff-text below. Swapping the face = replace the woff2 in ../fonts (with its licence), edit the
+   src / family here and the two tokens; nothing else in the kit or an app names the file. */
 @font-face {
   font-family: "InterVariable";
-  src: url("../assets/fonts/InterVariable.woff2") format("woff2");
+  src: url("../fonts/InterVariable.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: block;
 }
 
+/* ---- Mono face ------------------------------------------------------------------------------ */
 @font-face {
   font-family: "Geist Mono";
-  src: url("../assets/fonts/GeistMono-Variable.woff2") format("woff2");
+  src: url("../fonts/GeistMono-Variable.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: block;
 }
 
+/* Global light angle of every specular rim (written by js/glass.js initLight()). */
 @property --la {
   syntax: '<angle>';
   inherits: true;
@@ -29,11 +36,11 @@
 
   /* ---- Type ---------------------------------------------------------------------------- */
   --font-text: "InterVariable", system-ui, sans-serif;
-  --font-display: "InterVariable", system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
-
-  /* cv05 = lowercase l with a tail, ss03 = round quotes. Mono: no ligatures. */
+  /* cv05 = lowercase l with a tail, ss03 = round quotes (Inter features; change with the face). */
   --ff-text: "cv05" 1, "ss03" 1;
+  --font-display: var(--font-text);
+  --font-mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  /* Mono: no ligatures. */
   --ff-mono: "liga" 0, "calt" 0;
 
   --w-body: 450;
@@ -47,9 +54,9 @@
   --tr-display: -0.019em;
   --t-title: var(--w-title) 19px / 1.22 var(--font-display);       /* empty state title */
   --tr-title: -0.017em;
-  --t-headline: var(--w-title) 15px / 1.3 var(--font-display);      /* popover titles, Start */
+  --t-headline: var(--w-title) 15px / 1.3 var(--font-display);      /* popover titles, primary pill */
   --tr-headline: -0.009em;
-  --t-card: 560 14px / 1.3 var(--font-text);                        /* file names, setting labels */
+  --t-card: 560 14px / 1.3 var(--font-text);                        /* list item names, setting labels */
   --tr-card: -0.006em;
   --t-body: var(--w-body) 13.5px / 1.45 var(--font-text);           /* body, toasts */
   --tr-body: -0.005em;
@@ -63,11 +70,11 @@
   --tr-meta: 0em;
   --t-caption: 520 11.5px / 1.3 var(--font-text);                   /* control captions */
   --tr-caption: 0.003em;
-  --t-micro: 600 10.5px / 1.4 var(--font-text);                     /* kind chips, tags, kbd */
+  --t-micro: 600 10.5px / 1.4 var(--font-text);                     /* chips, tags, kbd */
   --tr-micro: 0.02em;
   --t-mono: 450 12.5px / 1.4 var(--font-mono);                      /* paths */
   --t-mono-s: 450 12px / 1.35 var(--font-mono);                     /* versions, codecs */
-  --t-mono-xs: 500 11px / 1.3 var(--font-mono);                     /* the version label */
+  --t-mono-xs: 500 11px / 1.3 var(--font-mono);                     /* the version pill */
 
   /* ---- Scene: the base gradient, black at the top to deep navy at the bottom ------------ */
   --bg-top: #000105;
@@ -90,7 +97,7 @@
   --stroke-1: rgba(255, 255, 255, 0.08);
   --stroke-2: rgba(255, 255, 255, 0.14);
 
-  /* ---- Identity "forge": cobalt to cyan, an ember spark, mint for done ------------------- */
+  /* ---- Identity (default: cobalt to cyan, an ember spark, mint for done) ----------------- */
   --accent: #4d8dff;
   --accent-2: #6a66ff;
   --accent-ink: #b5ccff;
@@ -104,11 +111,7 @@
   --accent-grad-a: linear-gradient(135deg, rgba(54, 195, 255, 0.62) 0%, rgba(75, 134, 255, 0.62) 48%, rgba(110, 95, 255, 0.66) 100%);
   --mint-grad: linear-gradient(135deg, #2fe0c0 0%, #44b8ff 100%);
   --mint-grad-a: linear-gradient(135deg, rgba(47, 224, 192, 0.62) 0%, rgba(68, 184, 255, 0.6) 100%);
-
-  /* Kind colours (chips, waveform, panel accents) */
-  --k-video: #7fa8ff;
-  --k-image: #5fe3cf;
-  --k-audio: #bb9cff;
+  --glyph-glow: rgba(70, 130, 255, 0.55);   /* drop shadow of the app glyph in the title bar */
 
   /* Glass tints */
   --tint-clear: rgba(255, 255, 255, 0.035);
@@ -146,8 +149,7 @@
   --t-fast: 160ms;
   --t-med: 280ms;
 
-  /* Layout */
+  /* Layout: page gutter and the title bar height (sheets and toasts sit below the title bar) */
   --gutter: clamp(14px, 3vw, 20px);
   --titlebar-h: 50px;
-  --foot-h: 56px;
 }

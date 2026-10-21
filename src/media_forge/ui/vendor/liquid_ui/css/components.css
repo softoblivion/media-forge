@@ -1,5 +1,6 @@
-/* Components: controls (segmented, switch, stepper, select, slider, size field), overlays (scrim,
-   sheet, popover), update popover, menus, toasts, settings sheet rows. */
+/* Liquid UI components: segmented control, switch, stepper, select, slider, text field,
+   overlays (scrim, sheet, popover), update popover, menus and split buttons, toasts, settings
+   sheet rows, title bar (brand, version pill, window cluster). docs/LIQUID_UI.md, section 5. */
 
 /* ---------------------------------------------------------------------------------------------
    Segmented control with droplet */
@@ -88,6 +89,12 @@
 }
 
 .seg.is-disabled .seg-opt { pointer-events: none; }
+
+/* A chip row that overflows fades at the side that can still scroll. The fade is a mask on the
+   row itself: the row is the droplet's own backdrop root anyway (it refracts the labels). */
+.seg-scroll.fade-r { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
+.seg-scroll.fade-l { -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px); mask-image: linear-gradient(90deg, transparent, #000 36px); }
+.seg-scroll.fade-l.fade-r { -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
 
 /* ---------------------------------------------------------------------------------------------
    Switch */
@@ -256,7 +263,7 @@
 .select-opt.is-on .select-check { opacity: 1; }
 
 /* ---------------------------------------------------------------------------------------------
-   Slider (quality) */
+   Slider */
 
 .slider {
   display: flex;
@@ -319,63 +326,7 @@
 .slider.is-disabled .slider-in { cursor: default; }
 
 /* ---------------------------------------------------------------------------------------------
-   Size limit field */
-
-.lim {
-  display: inline-flex;
-  align-items: center;
-  height: 34px;
-  width: 200px;
-  max-width: 100%;
-  padding: 0 4px 0 12px;
-  border-radius: 12px;
-  background: var(--well);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.32), inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
-  transition: box-shadow var(--t-fast) ease;
-}
-
-.lim:focus-within { box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.32), 0 0 0 2px rgba(120, 160, 255, 0.7); }
-
-.lim-in {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  font: var(--w-medium) 13.5px / 1 var(--font-text);
-  color: var(--ink-1);
-  outline: none;
-  user-select: text;
-}
-
-.lim-in::placeholder { color: var(--ink-4); }
-
-.lim-unit {
-  margin: 0 6px 0 4px;
-  font: var(--t-caption);
-  color: var(--ink-3);
-}
-
-.lim-clear {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--t-fast) ease, background-color var(--t-fast) ease;
-}
-
-.lim-clear .ic { width: 14px; height: 14px; }
-.lim.has-value .lim-clear { opacity: 1; pointer-events: auto; }
-.lim-clear:hover { background: var(--fill-3); color: var(--ink-1); }
+   Text field */
 
 .field {
   width: 100%;
@@ -698,7 +649,7 @@
 .toast-action:hover { background: var(--fill-4); }
 
 /* ---------------------------------------------------------------------------------------------
-   Settings sheet */
+   Settings sheet: head, scroller, groups and rows (the content is the app's) */
 
 .sheet-head {
   display: flex;
@@ -742,8 +693,7 @@
   padding: 11px 16px;
 }
 
-.set-row + .set-row,
-.set-panel { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.set-row + .set-row { border-top: 1px solid rgba(255, 255, 255, 0.06); }
 .set-row-col { flex-direction: column; align-items: stretch; gap: 8px; }
 
 .set-label {
@@ -761,64 +711,147 @@
 .set-ctl { flex: none; display: flex; align-items: center; gap: 8px; }
 .set-hint { font: var(--t-meta); color: var(--ink-3); }
 
-.set-path {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.path-text {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: var(--well);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
-  font: var(--t-mono);
-  --ff-feat: var(--ff-mono);
-  color: var(--ink-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: rtl;
-  text-align: left;
-  user-select: text;
-}
-
-.set-panel { padding: 4px 0 6px; }
-.set-panel .panel { padding: 8px 16px 6px; }
-
-.eng-rows { padding: 4px 0; }
-
-.eng-row {
-  display: grid;
-  grid-template-columns: 10px 104px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 6px 16px;
-}
-
-.eng-row + .eng-row { border-top: 1px solid rgba(255, 255, 255, 0.05); }
-.eng-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-4); }
-.eng-row.is-ok .eng-dot { background: var(--mint); box-shadow: 0 0 8px rgba(63, 226, 193, 0.7); }
-.eng-row.is-busy .eng-dot { background: var(--amber); animation: ver-pulse 1.4s ease-in-out infinite; }
-.eng-row.is-bad .eng-dot { background: var(--rose); }
-.eng-name { font: var(--t-card); font-size: 13px; font-weight: var(--w-medium); }
-.eng-val { font: var(--t-mono-s); --ff-feat: var(--ff-mono); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
-.eng-st { font: var(--t-meta); color: var(--ink-3); text-align: right; }
-
+/* Update status row (js/update.js mountSettings). */
 .upd-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .upd-status { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .upd-status b { font: var(--t-card); font-weight: var(--w-medium); }
 .upd-status small { font: var(--t-meta); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .upd-acts { flex: none; }
 
-.set-about {
-  margin: 18px 12px 0;
-  font: var(--t-caption);
-  color: var(--ink-4);
-  text-align: center;
+/* ---------------------------------------------------------------------------------------------
+   Title bar */
+
+.titlebar {
+  position: fixed;
+  z-index: 45;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--titlebar-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 calc(var(--gutter) + 2px);
+}
+
+.tb-drag {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.titlebar > :not(.tb-drag) {
+  position: relative;
+  z-index: 1;
+}
+
+.tb-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+}
+
+.tb-glyph {
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 2px 8px rgba(70, 130, 255, 0.55));
+}
+
+.tb-name {
+  font: var(--w-title) 14.5px / 1 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--ink-1);
+  text-shadow: var(--ink-shadow);
+}
+
+.tb-space {
+  flex: 1;
+  align-self: stretch;
+}
+
+/* Version pill: a small capsule lens; a dot when an update is available. */
+.ver-pill {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-pill);
+  color: var(--ink-3);
+  font: var(--t-mono-xs);
+  --ff-feat: var(--ff-mono);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  --lens-tint: rgba(255, 255, 255, 0.035);
+  --lens-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --lens-bloom: 0.08;
+  transition: color var(--t-fast) ease;
+}
+
+.ver-pill:hover,
+.ver-pill.is-source { color: var(--ink-1); }
+
+.ver-dot {
+  display: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.ver-pill[data-stage="available"],
+.ver-pill[data-stage="downloading"],
+.ver-pill[data-stage="ready"] { color: var(--accent-ink); }
+
+.ver-pill[data-stage="available"] .ver-dot,
+.ver-pill[data-stage="downloading"] .ver-dot,
+.ver-pill[data-stage="ready"] .ver-dot { display: block; }
+
+.ver-pill[data-stage="ready"] .ver-dot { background: var(--mint); box-shadow: 0 0 8px var(--mint); }
+.ver-pill[data-stage="downloading"] .ver-dot { animation: ver-pulse 1.4s ease-in-out infinite; }
+
+/* Window cluster: gear | minimize, close in one capsule lens. Buttons inside are fills. */
+.tb-cluster {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  --lens-tint: rgba(255, 255, 255, 0.035);
+  --lens-shadow: var(--shadow-s);
+}
+
+.tb-btn {
+  width: 32px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+}
+
+.tb-btn .ic { width: 16px; height: 16px; }
+.tb-btn:hover { background: var(--fill-3); color: var(--ink-1); }
+.tb-close:hover { background: #e5484d; color: #fff; }
+.tb-gear .ic { width: 18px; height: 18px; transition: rotate 0.6s var(--ease-out); }
+.tb-gear:hover .ic,
+.tb-gear.is-source .ic { rotate: 60deg; }
+.tb-gear.is-source { background: var(--fill-3); color: var(--ink-1); }
+
+.tb-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--stroke-2);
 }
 
 @keyframes ver-pulse {
@@ -828,5 +861,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .pop-progress.is-indet span,
-  .eng-row.is-busy .eng-dot { animation: none; }
+  .ver-pill[data-stage="downloading"] .ver-dot { animation: none; }
 }

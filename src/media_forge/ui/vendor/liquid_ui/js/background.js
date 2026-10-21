@@ -12,19 +12,30 @@
 // the speck canvas pause while the document is hidden, the window is unfocused (`window` event or
 // the browser blur), after 90 s without input, or with prefers-reduced-motion. Nothing here
 // triggers layout per frame: the drift is compositor work, the canvas draws ~40 sprites.
+//
+// initBackground(root, options): every colour is an option (docs/LIQUID_UI.md, "Background"); the
+// base gradient comes from the --bg-top / --bg-mid / --bg-bottom tokens.
 
 import { reducedMotion } from './motion.js';
 
-const FIELDS = [
-  // c: colour, x/y: centre in % of the scene, s: diameter (vmax), a: alpha, d: period (s)
+/** Default colour fields (cobalt, teal, violet, a faint ember). */
+export const DEFAULT_FIELDS = [
+  // c: colour, x/y: centre in % of the scene, s: diameter (vmax), a: alpha, d: period (s),
+  // anim: one of the drift-a .. drift-d keyframes of css/scene.css
   { c: '#2f62ff', x: 18, y: 38, s: 92, a: 0.46, d: 58, anim: 'drift-a' },
   { c: '#12b8b0', x: 86, y: 78, s: 84, a: 0.3, d: 72, anim: 'drift-b' },
   { c: '#7a48ff', x: 78, y: 26, s: 70, a: 0.3, d: 46, anim: 'drift-c' },
   { c: '#ff8a4a', x: 12, y: 92, s: 58, a: 0.12, d: 78, anim: 'drift-d' },
 ];
 
-const IDLE_MS = 90000;
-const SPECKS = 40;
+/** Default speck tints ("r,g,b"); the 4th and 5th are the rarer warm and violet specks. */
+export const DEFAULT_SPECK_TINTS = ['200,225,255', '150,210,255', '255,255,255', '255,190,140', '175,160,255'];
+
+let FIELDS = DEFAULT_FIELDS;
+let LINE_COLOR = '#cfe0ff';
+let TINTS = DEFAULT_SPECK_TINTS;
+let IDLE_MS = 90000;
+let SPECKS = 40;
 const FRAME_MS = 1000 / 30;
 
 let scene = null;
@@ -104,13 +115,12 @@ function linesSvg() {
     const o = (0.028 + 0.03 * ((i * 7) % 3) / 2).toFixed(3);
     paths += `<path d="${d}" stroke-opacity="${o}" stroke-width="0.9"/>`;
   }
-  return `<svg viewBox="0 0 960 1280" preserveAspectRatio="xMidYMid slice" fill="none" stroke="#cfe0ff" stroke-width="1.15">${paths}</svg>`;
+  return `<svg viewBox="0 0 960 1280" preserveAspectRatio="xMidYMid slice" fill="none" stroke="${LINE_COLOR}" stroke-width="1.15">${paths}</svg>`;
 }
 
 /** Soft round sprites in a few tints; drawn scaled, so a speck costs one drawImage. */
 function makeSprites() {
-  const tints = ['200,225,255', '150,210,255', '255,255,255', '255,190,140', '175,160,255'];
-  return tints.map((rgb) => {
+  return TINTS.map((rgb) => {
     const s = 32;
     const c = document.createElement('canvas');
     c.width = c.height = s;
@@ -166,7 +176,7 @@ function draw(dt, t) {
     if (fade <= 0) continue;
     ctx.globalAlpha = s.a * fade;
     const d = s.r * 2;
-    ctx.drawImage(sprites[s.sp], x - s.r, s.y - s.r, d, d);
+    ctx.drawImage(sprites[s.sp % sprites.length], x - s.r, s.y - s.r, d, d);
   }
   ctx.globalAlpha = 1;
 }
@@ -202,7 +212,7 @@ function sync() {
 }
 
 // Pointer parallax: depth per layer (px at the window edge), eased by the CSS transition.
-const DEPTH = [10, 5, 16];
+let DEPTH = [10, 5, 16];
 let parRaf = 0;
 let lastPointer = null;
 
@@ -217,7 +227,20 @@ function parallaxFrame() {
   });
 }
 
-export function initBackground(root = document.getElementById('scene')) {
+/**
+ * Build the scene into `root` (default `#scene`). Call once.
+ * @param {HTMLElement} root
+ * @param {{fields?:{c:string,x:number,y:number,s:number,a:number,d:number,anim:string}[],
+ *          lineColor?:string, speckTints?:string[], specks?:number, idleMs?:number,
+ *          parallax?:number[]}} options
+ */
+export function initBackground(root = document.getElementById('scene'), options = {}) {
+  if (options.fields) FIELDS = options.fields;
+  if (options.lineColor) LINE_COLOR = options.lineColor;
+  if (options.speckTints && options.speckTints.length) TINTS = options.speckTints;
+  if (options.specks != null) SPECKS = Math.max(0, options.specks);
+  if (options.idleMs) IDLE_MS = options.idleMs;
+  if (options.parallax) DEPTH = options.parallax;
   scene = root;
   scene.innerHTML = '';
 

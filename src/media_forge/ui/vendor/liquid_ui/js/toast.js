@@ -1,4 +1,5 @@
 // Toasts: glass capsules dropping from the top centre with a spring, at most three on screen.
+// Host: the element passed to initToasts(), else the page's `#toasts` (looked up on first use).
 
 import { springAnimate, SPRINGS, whenDone } from './motion.js';
 import { Lens, gel } from './glass.js';
@@ -19,6 +20,7 @@ export function initToasts(el = document.getElementById('toasts')) {
  * @param {{action?:{label:string, run:Function}, ms?:number, sticky?:boolean}} opts
  */
 export function toast(level, text, opts = {}) {
+  if (!root) root = document.getElementById('toasts');
   if (!root || !text) return null;
   level = ICONS[level] ? level : 'info';
   for (const t of root.children) {

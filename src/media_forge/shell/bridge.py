@@ -622,6 +622,11 @@ class Bridge:
         return list(self._engine.start_items(ids) or [])
 
     @_api
+    def start_now(self, id):  # noqa: A002
+        _need_id(id)
+        return bool(self._engine.start_now(id))
+
+    @_api
     def cancel(self, id):  # noqa: A002
         _need_id(id)
         return bool(self._engine.cancel(id))
@@ -751,7 +756,7 @@ def _need_id(value: Any) -> None:
 # The public names of Bridge must be exactly the contract methods (checked by tests/test_shell_bridge.py).
 CONTRACT_METHODS = (
     "ready", "add_files", "pick_files", "remove_item", "clear", "set_item_settings", "apply_to_kind", "start",
-    "cancel", "cancel_all", "get_settings", "set_settings", "pick_output_dir", "reveal", "open_path", "open_url",
-    "capabilities", "window_minimize", "window_close", "update_status", "check_updates", "download_update",
-    "apply_update", "log",
+    "start_now", "cancel", "cancel_all", "get_settings", "set_settings", "pick_output_dir", "reveal", "open_path",
+    "open_url", "capabilities", "window_minimize", "window_close", "update_status", "check_updates",
+    "download_update", "apply_update", "log",
 )

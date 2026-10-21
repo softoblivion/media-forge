@@ -209,6 +209,26 @@ class EngineTest(ScratchCase):
         broken = self.add("notmedia.mp4")[0]
         self.assertEqual(self.engine.start_items([broken["id"]]), [])  # a probe failure cannot be retried
 
+    def test_start_now_runs_and_runs_again(self):
+        folder = self.out / "now"
+        folder.mkdir(exist_ok=True)
+        for old in folder.iterdir():
+            old.unlink()
+        self.engine.set_settings({"output_mode": "folder", "output_dir": str(folder)})
+        item_id = self.add("photo.jpg")[0]["id"]
+        self.assertTrue(self.engine.start_now(item_id))
+        self.assertTrue(self.engine.wait_idle(30))
+        self.assertEqual(self.engine.item(item_id)["output"]["path"], str(folder / "photo_forge.jpg"))
+        self.assertTrue(self.engine.start_now(item_id))  # a done item runs again
+        self.assertTrue(self.engine.wait_idle(30))
+        self.assertEqual(self.engine.item(item_id)["output"]["path"], str(folder / "photo_forge (2).jpg"))
+        statuses = [p["status"] for p in self.rec.named("item") if p["id"] == item_id]
+        self.assertNotIn("queued", statuses)
+        self.assertEqual(self.rec.named("batch_done")[-1], {"done": 1, "failed": 0, "cancelled": 0})
+        broken = self.add("notmedia.mp4")[0]
+        self.assertFalse(self.engine.start_now(broken["id"]))  # a probe failure cannot start
+        self.assertFalse(self.engine.start_now("missing"))
+
     def test_missing_output_folder_at_job_time(self):
         folder = self.out / "vanishing"
         folder.mkdir(exist_ok=True)
@@ -276,6 +296,86 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(q.get("a").status, "error")
         self.assertEqual(q.get("a").error, "The conversion failed; details are in the log.")
         self.assertEqual([p for n, p in events if n == "batch_done"][-1], {"done": 0, "failed": 1, "cancelled": 1})
+        q.stop()
+
+    def test_start_now_ignores_parallel_jobs(self):
+        gates = {name: threading.Event() for name in ("a", "b", "c", "d")}
+
+        def runner(item, ctx):
+            if not gates[item.id].wait(5):
+                raise RuntimeError("gate timeout")
+            return {"path": item.id}
+
+        events = []
+        q = JobQueue(lambda n, p: events.append((n, p)), runner, workers=1, image_lane=False)
+        q.start()
+        for name in ("a", "b", "c"):
+            q.add(Item(id=name, path=name, name=name, kind="video", size=1, settings={}, status="ready"))
+        q.add(Item(id="d", path="d", name="d", kind="video", size=1, settings={}, status="probing"))
+        q.add(Item(id="e", path="e", name="e", kind="video", size=1, settings={}, status="error",
+                   error="Not a media file."))
+        self.assertEqual(q.start_items(["a", "b", "c"]), ["a", "b", "c"])
+        self.assertTrue(wait_for(lambda: q.get("a").status == "running", 5))
+        self.assertTrue(q.start_now("c"))  # leaves the queue, runs beside a
+        self.assertEqual(q.get("c").status, "running")
+        self.assertEqual(q.get("b").status, "queued")
+        self.assertFalse(q.start_now("a"))  # running
+        self.assertFalse(q.start_now("c"))
+        self.assertFalse(q.start_now("d"))  # probing
+        self.assertFalse(q.start_now("e"))  # the probe failed
+        self.assertFalse(q.start_now("zzz"))
+        gates["c"].set()
+        self.assertTrue(wait_for(lambda: q.get("c").status == "done", 5))
+        self.assertEqual(q.get("a").status, "running")
+        self.assertEqual(q.get("b").status, "queued")  # parallel_jobs = 1 still holds for the queue
+        self.assertEqual([n for n, _ in events if n == "batch_done"], [])
+        gates["a"].set()
+        gates["b"].set()
+        self.assertTrue(q.wait_idle(5))
+        self.assertEqual([i.status for i in q.items()], ["done", "done", "done", "probing", "error"])
+        self.assertEqual([p for n, p in events if n == "batch_done"], [{"done": 3, "failed": 0, "cancelled": 0}])
+        c_statuses = [p["status"] for n, p in events if n == "item" and p["id"] == "c"]
+        self.assertEqual(c_statuses[0], "queued")
+        self.assertEqual(c_statuses[1], "running")
+        self.assertEqual(c_statuses[-1], "done")
+        gates["c"].clear()
+        self.assertTrue(q.start_now("c"))  # a done item runs again, reset like start
+        self.assertIsNone(q.get("c").output)
+        gates["c"].set()
+        self.assertTrue(q.wait_idle(5))
+        self.assertEqual(q.get("c").output, {"path": "c"})
+        self.assertTrue(wait_for(lambda: not any(t.is_alive() for t in q._extra), 5))  # the extra worker ends
+        q.stop()
+
+    def test_start_now_cancel_and_error_retry(self):
+        gate = threading.Event()
+        calls = []
+
+        def runner(item, ctx):
+            calls.append(item.id)
+            if len(calls) == 1:
+                raise UserError("Broken.")
+            while not ctx.cancel.is_set() and not gate.is_set():
+                time.sleep(0.01)
+            return {}
+
+        events = []
+        q = JobQueue(lambda n, p: events.append((n, p)), runner, workers=1, image_lane=False)
+        q.start()
+        q.add(Item(id="a", path="a", name="a", kind="video", size=1, settings={}, status="ready"))
+        self.assertTrue(q.start_now("a"))
+        self.assertTrue(q.wait_idle(5))
+        self.assertEqual(q.get("a").status, "error")
+        with q._lock:
+            q._items["a"].info = object()  # a probed item that failed its job
+        self.assertTrue(q.start_now("a"))  # retry
+        self.assertIsNone(q.get("a").error)
+        self.assertTrue(wait_for(lambda: len(calls) == 2, 5))
+        self.assertTrue(q.cancel("a"))
+        self.assertTrue(q.wait_idle(5))
+        self.assertEqual(q.get("a").status, "ready")
+        self.assertEqual([p for n, p in events if n == "batch_done"],
+                         [{"done": 0, "failed": 1, "cancelled": 0}, {"done": 0, "failed": 0, "cancelled": 1}])
         q.stop()
 
 

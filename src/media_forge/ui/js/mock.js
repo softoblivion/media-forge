@@ -520,26 +520,42 @@ export function createMock({ params, dispatch }) {
     if (!tickTimer) tickTimer = setInterval(tick, 160);
   }
 
+  /** Start one queued item on a worker (the caller checked the parallel limit, or ignores it). */
+  function startJob(it) {
+    const job = { id: it.id, plan: plan(it), t: 0, outPath: null };
+    if (job.plan.error) {
+      it.status = 'error';
+      it.error = job.plan.error;
+      it.progress = 0;
+      batch && batch.failed++;
+      emitItem(pub(it));
+      return;
+    }
+    job.outPath = outputPath(it);
+    running.set(it.id, job);
+    it.status = 'running';
+    it.progress = 0;
+    it.stage = job.plan.stages[0][0];
+    emitItem(pub(it));
+  }
+
+  /** Reset an item for a new run (start / start_now): ready, error (retry) or done (run again). */
+  function requeue(it) {
+    it.status = 'queued';
+    it.progress = 0;
+    it.stage = null;
+    it.eta = null;
+    it.speed = null;
+    it.error = null;
+    it.output = null;
+  }
+
   function pump() {
     while (running.size < settings.parallel_jobs && queue.length) {
       const id = queue.shift();
       const it = items.get(id);
       if (!it || it.status !== 'queued') continue;
-      const job = { id, plan: plan(it), t: 0, outPath: null };
-      if (job.plan.error) {
-        it.status = 'error';
-        it.error = job.plan.error;
-        it.progress = 0;
-        batch && batch.failed++;
-        emitItem(pub(it));
-        continue;
-      }
-      job.outPath = outputPath(it);
-      running.set(id, job);
-      it.status = 'running';
-      it.progress = 0;
-      it.stage = job.plan.stages[0][0];
-      emitItem(pub(it));
+      startJob(it);
     }
     if (!running.size && !queue.length) {
       clearInterval(tickTimer);
@@ -941,13 +957,7 @@ export function createMock({ params, dispatch }) {
         // ready; error = retry (a file that was read); done = run again (a new numbered output).
         const ok = it.status === 'ready' || (ids != null && ((it.status === 'error' && it.probe) || it.status === 'done'));
         if (!ok) continue;
-        it.status = 'queued';
-        it.progress = 0;
-        it.stage = null;
-        it.eta = null;
-        it.speed = null;
-        it.error = null;
-        it.output = null;
+        requeue(it);
         queue.push(it.id);
         queued.push(it.id);
         emitItem(pub(it));
@@ -958,6 +968,25 @@ export function createMock({ params, dispatch }) {
         setTimeout(pump, 120);
       }
       return queued;
+    },
+
+    // Runs the item at once on an extra worker, ignoring parallel_jobs (BRIDGE_API 2).
+    async start_now(id) {
+      const it = find(id);
+      if (it.status === 'running' || it.status === 'probing') return false;
+      if (it.status === 'error' && !it.probe) return false;
+      if (caps.ffmpeg !== 'ready') throw new Error('FFmpeg is not ready yet.');
+      if (it.status === 'queued') {
+        const i = queue.indexOf(it.id);
+        if (i >= 0) queue.splice(i, 1);
+      } else {
+        requeue(it);
+        emitItem(pub(it));
+      }
+      if (!batch) batch = { done: 0, failed: 0, cancelled: 0 };
+      startJob(it);
+      startTicking();
+      return true;
     },
 
     async cancel(id) {

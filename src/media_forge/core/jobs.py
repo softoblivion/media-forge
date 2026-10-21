@@ -102,6 +102,7 @@ class JobQueue:
         self._general: list[threading.Thread] = []
         self._image_lane_enabled = image_lane
         self._image_thread: threading.Thread | None = None
+        self._extra: list[threading.Thread] = []  # start_now threads, one per job
         self._flusher: threading.Thread | None = None
         self._stopping = False
         self._started = False
@@ -163,7 +164,7 @@ class JobQueue:
             for event in self._cancels.values():
                 event.set()
             self._cv.notify_all()
-            threads = list(self._general) + ([self._image_thread] if self._image_thread else [])
+            threads = list(self._general) + ([self._image_thread] if self._image_thread else []) + list(self._extra)
         deadline = time.monotonic() + timeout
         for thread in threads:
             thread.join(max(0.0, deadline - time.monotonic()))
@@ -256,6 +257,32 @@ class JobQueue:
         for item_id in queued:
             self.emit_item(item_id)
         return queued
+
+    def start_now(self, item_id: str) -> bool:
+        """Run one item at once on an extra thread that ends with the job, outside `parallel_jobs` and the lanes.
+
+        A queued item leaves the queue; a ready, done or failed (probed) item is reset as by `start_items`.
+        False for an unknown, probing or running item, a failed probe, or a stopping queue.
+        """
+        with self._cv:
+            item = self._items.get(item_id)
+            if item is None or item.removed or self._stopping:
+                return False
+            if item.status == "queued":
+                if item_id in self._queue:
+                    self._queue.remove(item_id)
+            elif item.status in ("ready", "done") or (item.status == "error" and item.info is not None):
+                item.output, item.error = None, None
+            else:
+                return False
+            job = self._claim(item_id)
+            thread = threading.Thread(target=self._execute, args=job, daemon=True,
+                                      name=f"jobs-now-{job[2]}")
+            self._extra = [t for t in self._extra if t.is_alive()]
+            self._extra.append(thread)
+            self._cv.notify_all()
+        thread.start()
+        return True
 
     def cancel(self, item_id: str) -> bool:
         with self._cv:
@@ -357,48 +384,57 @@ class JobQueue:
                         break
                     self._cv.wait(0.5)
                 self._queue.remove(item_id)
-                item = self._items[item_id]
-                item.status = "running"
-                item.started_at = time.time()
-                item.progress, item.stage, item.eta, item.speed = 0.0, None, None, None
-                cancel = threading.Event()
-                self._cancels[item_id] = cancel
-                self._running[item_id] = item
-                job_id = f"{item_id}-{next(self._job_counter)}"
-                snapshot = item.snapshot()
-            self.emit_item(item_id)
-            ctx = JobContext(self, item_id, job_id, cancel)
-            status, output, error = "error", None, None
-            try:
-                output = self._runner(snapshot, ctx)
-                status = "done"
-                if cancel.is_set():
-                    raise Cancelled()
-            except Cancelled:
-                status, output = "cancelled", None
-            except UserError as exc:
-                status, error = "error", exc.message
-            except Exception:  # noqa: BLE001
-                log.exception("job %s failed", job_id)
-                status, error = "error", MSG_INTERNAL
-            with self._cv:
-                self._running.pop(item_id, None)
-                self._cancels.pop(item_id, None)
-                item.pending = False
-                if status == "cancelled":
-                    self._batch["cancelled"] += 1
-                    item.status, item.progress, item.stage, item.eta, item.speed = "ready", 0.0, None, None, None
-                elif status == "done":
-                    self._batch["done"] += 1
-                    item.status, item.progress, item.stage, item.eta, item.speed = "done", 1.0, None, None, None
-                    item.output = output
-                else:
-                    self._batch["failed"] += 1
-                    item.status, item.stage, item.eta, item.speed = "error", None, None, None
-                    item.error = error
-                self._cv.notify_all()
-            self.emit_item(item_id)
-            self._check_batch_done()
+                job = self._claim(item_id)
+            self._execute(*job)
+
+    def _claim(self, item_id: str) -> tuple[Item, Item, str, threading.Event]:
+        """Mark an item running (caller holds `_lock`; the item is not in the queue any more)."""
+        item = self._items[item_id]
+        item.status = "running"
+        item.started_at = time.time()
+        item.progress, item.stage, item.eta, item.speed = 0.0, None, None, None
+        cancel = threading.Event()
+        self._cancels[item_id] = cancel
+        self._running[item_id] = item
+        job_id = f"{item_id}-{next(self._job_counter)}"
+        return item, item.snapshot(), job_id, cancel
+
+    def _execute(self, item: Item, snapshot: Item, job_id: str, cancel: threading.Event) -> None:
+        """Run one claimed job to its end on the calling thread and record the outcome."""
+        item_id = item.id
+        self.emit_item(item_id)
+        ctx = JobContext(self, item_id, job_id, cancel)
+        status, output, error = "error", None, None
+        try:
+            output = self._runner(snapshot, ctx)
+            status = "done"
+            if cancel.is_set():
+                raise Cancelled()
+        except Cancelled:
+            status, output = "cancelled", None
+        except UserError as exc:
+            status, error = "error", exc.message
+        except Exception:  # noqa: BLE001
+            log.exception("job %s failed", job_id)
+            status, error = "error", MSG_INTERNAL
+        with self._cv:
+            self._running.pop(item_id, None)
+            self._cancels.pop(item_id, None)
+            item.pending = False
+            if status == "cancelled":
+                self._batch["cancelled"] += 1
+                item.status, item.progress, item.stage, item.eta, item.speed = "ready", 0.0, None, None, None
+            elif status == "done":
+                self._batch["done"] += 1
+                item.status, item.progress, item.stage, item.eta, item.speed = "done", 1.0, None, None, None
+                item.output = output
+            else:
+                self._batch["failed"] += 1
+                item.status, item.stage, item.eta, item.speed = "error", None, None, None
+                item.error = error
+            self._cv.notify_all()
+        self.emit_item(item_id)
+        self._check_batch_done()
 
     def _check_batch_done(self) -> None:
         with self._emit_lock:

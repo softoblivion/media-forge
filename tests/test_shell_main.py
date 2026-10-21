@@ -21,7 +21,8 @@ class MainHelpersTest(unittest.TestCase):
         self.assertEqual(main.MUTEX_NAME, "Local\\MediaForge.SingleInstance")
         self.assertEqual(main.BACKGROUND, "#04070f")
         self.assertEqual(main.START_SIZE, (630, 840))
-        self.assertEqual(main.MIN_SIZE, (540, 720))
+        self.assertEqual(main.SIZE_LADDER[-1], (540, 720))
+        self.assertFalse(hasattr(main, "MIN_SIZE") or hasattr(main, "TOP_GRIP"))
         self.assertEqual(main.HTTP_PORT_FIRST, 42101)
 
     def test_parse_args(self):
