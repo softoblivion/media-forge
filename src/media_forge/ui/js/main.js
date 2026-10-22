@@ -3,6 +3,7 @@
 import { connect, call, on, goLive, backendMode, reportError } from './api.js';
 import { store, notify, watch } from './store.js';
 import { initBackground, setFocused } from '../vendor/liquid_ui/js/background.js';
+import { applyTheme } from '../vendor/liquid_ui/js/theme.js';
 import { initLight, gel, Lens } from '../vendor/liquid_ui/js/glass.js';
 import { SPRINGS, springAnimate, reducedMotion } from '../vendor/liquid_ui/js/motion.js';
 import { topOverlay } from '../vendor/liquid_ui/js/overlay.js';
@@ -15,13 +16,20 @@ import { mountUpdateControl } from '../vendor/liquid_ui/js/update.js';
 import { initDropzone } from './dropzone.js';
 import { initSound } from './sound.js';
 
-// Scene colour fields of Media Forge (cobalt, teal, violet, a faint ember); docs/UI_DESIGN.md 5.
-const SCENE_FIELDS = [
-  { c: '#2f62ff', x: 18, y: 38, s: 92, a: 0.46, d: 58, anim: 'drift-a' },
-  { c: '#12b8b0', x: 86, y: 78, s: 84, a: 0.3, d: 72, anim: 'drift-b' },
-  { c: '#7a48ff', x: 78, y: 26, s: 70, a: 0.3, d: 46, anim: 'drift-c' },
-  { c: '#ff8a4a', x: 12, y: 92, s: 58, a: 0.12, d: 78, anim: 'drift-d' },
-];
+// The theme saved with the settings (BRIDGE_API 3.5 `theme`): applied through the kit on every
+// confirmed settings object and mirrored in localStorage so index.html sets it before the first
+// paint. The scene reads the theme tokens itself (the kit's `deep` treatment); docs/UI_DESIGN.md 5.
+const THEME_KEY = 'media-forge.theme';
+
+function syncTheme(settings) {
+  if (!settings) return;
+  const name = applyTheme(settings.theme);
+  try {
+    localStorage.setItem(THEME_KEY, name);
+  } catch {
+    /* storage unavailable: the next launch starts on the default and switches after connect */
+  }
+}
 
 /** Version pill, update popover and toasts from the kit; the store keeps the last status. */
 function initUpdate(state) {
@@ -179,7 +187,7 @@ function entrance() {
 }
 
 async function boot() {
-  initBackground(document.getElementById('scene'), { fields: SCENE_FIELDS });
+  initBackground(document.getElementById('scene'));
   initLight();
   initToasts();
   initTitlebar();
@@ -197,6 +205,8 @@ async function boot() {
   store.options = state.options;
   store.caps = state.capabilities || null;
   store.settings = state.settings;
+  syncTheme(state.settings);
+  watch('settings', syncTheme);
 
   const update = initUpdate(state);
   initSettings(state, update);

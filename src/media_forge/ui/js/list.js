@@ -12,13 +12,12 @@
 import { call, on, emit } from './api.js';
 import { store, notify } from './store.js';
 import { SettingsPanel, planSummary } from './panels.js';
-import { springAnimate, springEasing, SPRINGS, whenDone, reducedMotion } from '../vendor/liquid_ui/js/motion.js';
+import { springAnimate, springEasing, SPRINGS, DURATIONS, STAGGER_MS, whenDone, reducedMotion, enterRow, leaveRow } from '../vendor/liquid_ui/js/motion.js';
 import { gel } from '../vendor/liquid_ui/js/glass.js';
 import { icon, KIND_ICON } from './icons.js';
 import { bytes, duration, codecName, sampleRate, channelsName, eta, percent, escapeHtml, KIND_LABEL, KIND_ALL, nKind } from './format.js';
 import { toast } from '../vendor/liquid_ui/js/toast.js';
 
-const EXPAND = { response: 0.46, damping: 0.86 };
 const STAGE = {
   analyzing: 'Analyzing',
   'pass 1': 'Pass 1 of 2',
@@ -44,7 +43,7 @@ export function initList(state) {
   on('item', (it) => it && upsert(it));
   on('items_added', (p) => {
     const list = (p && p.items) || [];
-    list.forEach((it, i) => upsert(it, { delay: i * 40 }));
+    list.forEach((it, i) => upsert(it, { index: i }));
     if (list.length) revealNew(list[0].id);
   });
   on('item_removed', (p) => p && removeCard(p.id));
@@ -55,7 +54,7 @@ export function initList(state) {
 
 /** Items returned by pick_files / add_files: added like the items_added event. */
 export function addItems(list) {
-  (list || []).forEach((it, i) => upsert(it, { delay: i * 40 }));
+  (list || []).forEach((it, i) => upsert(it, { index: i }));
   if (list && list.length) revealNew(list[0].id);
 }
 
@@ -77,7 +76,7 @@ function revealNew(id) {
 // ---------------------------------------------------------------------------------------------
 // Cards
 
-function upsert(it, { animate = true, delay = 0 } = {}) {
+function upsert(it, { animate = true, index = 0 } = {}) {
   const prev = store.items.get(it.id);
   store.items.set(it.id, it);
   let c = cards.get(it.id);
@@ -93,12 +92,7 @@ function upsert(it, { animate = true, delay = 0 } = {}) {
       if (!before || other.added_at < before.at) before = { el: oc.el, at: other.added_at };
     }
     listEl.insertBefore(c.el, before ? before.el : null);
-    if (animate && !reducedMotion.matches) {
-      springAnimate(c.el, [
-        { opacity: 0, transform: 'translateY(16px) scale(0.97)' },
-        { opacity: 1, transform: 'none' },
-      ], SPRINGS.bouncy, { delay, fill: 'backwards' });
-    }
+    if (animate) enterRow(c.el, index);  // the kit's row entrance (bouncy, STAGGER_MS per index)
   }
   render(c, it, prev);
   changed();
@@ -120,7 +114,7 @@ function createCard(it) {
         <div class="card-state"></div>
       </div>
       <div class="card-tools">
-        <button type="button" class="icon-btn card-del" data-act="remove" aria-label="Remove" title="Remove">${icon('trash')}</button>
+        <button type="button" class="icon-btn icon-btn-s card-del" data-act="remove" aria-label="Remove" title="Remove">${icon('trash')}</button>
         <button type="button" class="icon-btn card-exp" data-act="toggle" aria-expanded="false" aria-label="File settings">${icon('chevronDown')}</button>
       </div>
     </div>
@@ -179,7 +173,7 @@ function render(c, it, prev) {
       parts.thumb.innerHTML = `<img alt="" src="${it.thumb}" draggable="false">`;
       const img = parts.thumb.firstChild;
       img.decode && img.decode().catch(() => {});
-      if (prev && !prev.thumb && !reducedMotion.matches) img.animate([{ opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0)' }], { duration: 420, easing: 'ease-out' });
+      if (prev && !prev.thumb && !reducedMotion.matches) img.animate([{ opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0)' }], { duration: DURATIONS.reveal, easing: 'ease-out' });
     } else {
       const glyph = it.status === 'error' && !it.probe ? 'file' : KIND_ICON[it.kind] || 'file';
       parts.thumb.innerHTML = `<span class="thumb-ph">${icon(glyph)}</span>`;
@@ -229,7 +223,7 @@ function renderState(c, it) {
         s.innerHTML = `<span class="st-wait">${icon('clock')}<span>Queued</span></span><span class="st-acts"><button type="button" class="btn btn-xs st-btn" data-act="start-now" title="Start this file now, outside the queue">${icon('play')}<span>Start now</span></button><button type="button" class="btn btn-xs btn-ghost st-btn" data-act="cancel">Cancel</button></span>`;
         break;
       case 'running':
-        s.innerHTML = `<span class="st-run"><span class="st-stage"></span><b class="st-pct tnum"></b></span><span class="st-speed tnum"></span><button type="button" class="icon-btn st-x" data-act="cancel" aria-label="Cancel" title="Cancel">${icon('x')}</button>`;
+        s.innerHTML = `<span class="st-run"><span class="st-stage"></span><b class="st-pct tnum"></b></span><span class="st-speed tnum"></span><button type="button" class="icon-btn icon-btn-s st-x" data-act="cancel" aria-label="Cancel" title="Cancel">${icon('x')}</button>`;
         break;
       case 'done': {
         s.innerHTML = `<span class="st-done tnum">${icon('check')}<span class="st-out"></span></span><span class="st-acts"><button type="button" class="btn btn-xs st-btn" data-act="reveal" title="Show in folder">${icon('reveal')}<span>Show in folder</span></button><button type="button" class="btn btn-xs st-btn" data-act="open" title="Open">${icon('open')}<span>Open</span></button><button type="button" class="btn btn-xs st-btn" data-act="rerun" title="Process the file again with its current settings; the earlier output stays">${icon('retry')}<span>Run again</span></button></span>`;
@@ -303,10 +297,10 @@ function expand(id) {
   d.hidden = false;
   if (reducedMotion.matches) return;
   const h = d.scrollHeight;
-  const { easing, duration } = springEasing(EXPAND);
+  const { easing, duration } = springEasing(SPRINGS.expand);
   d.style.overflow = 'hidden';
   const a = d.animate([{ height: '0px' }, { height: `${h}px` }], { duration, easing });
-  c.panel.el.animate([{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'none' }], { duration: 360, easing: 'cubic-bezier(.2,.8,.2,1)', delay: 60, fill: 'backwards' });
+  springAnimate(c.panel.el, [{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'none' }], SPRINGS.smooth, { delay: STAGGER_MS, fill: 'backwards' });
   whenDone(a, () => {
     d.style.overflow = '';
     // Keep the opened card in view: scroll just enough to show its panel.
@@ -394,15 +388,9 @@ function removeCard(id) {
   const next = el.nextElementSibling || el.previousElementSibling;
   changed();
   if (wasFocused && next) next.focus({ preventScroll: true });
-  if (reducedMotion.matches) return el.remove();
-  el.style.pointerEvents = 'none';
-  const h = el.offsetHeight;
-  const a = el.animate([
-    { height: `${h}px`, opacity: 1, transform: 'scale(1)', marginBottom: '0px' },
-    { height: `${h}px`, opacity: 0, transform: 'scale(0.96)', offset: 0.4 },
-    { height: '0px', opacity: 0, transform: 'scale(0.96)', marginBottom: 'calc(var(--card-gap) * -1)' },
-  ], { duration: 420, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'forwards' });
-  whenDone(a, () => el.remove(), 0);
+  // The kit's row exit: fade and shrink, then the height and the card's own bottom margin (the
+  // list spacing, app.css) collapse so the cards below move up, then the element is removed.
+  leaveRow(el);
 }
 
 export async function removeItem(id) {

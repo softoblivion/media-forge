@@ -1,5 +1,6 @@
-// Settings sheet (Settings, BRIDGE_API 3.5): output, processing, defaults for new files (the same
-// panels as the cards), engine status (Capabilities 3.6) and updates. Grows out of the gear.
+// Settings sheet (Settings, BRIDGE_API 3.5): appearance (the kit's theme row), output, processing,
+// defaults for new files (the same panels as the cards), engine status (Capabilities 3.6) and
+// updates. Grows out of the gear.
 //
 // Saves are optimistic with a guard: while a save of a key is in flight, neither its answer nor a
 // `settings` event moves that control; a refusal shows the shell's sentence and the `settings`
@@ -10,6 +11,7 @@ import { store, notify, watch } from './store.js';
 import { Overlay } from '../vendor/liquid_ui/js/overlay.js';
 import { gel } from '../vendor/liquid_ui/js/glass.js';
 import { Segmented, Switch, Stepper } from '../vendor/liquid_ui/js/controls.js';
+import { applyTheme, mountThemeControl } from '../vendor/liquid_ui/js/theme.js';
 import { SettingsPanel } from './panels.js';
 import { icon } from './icons.js';
 import { escapeHtml, KIND_LABEL } from './format.js';
@@ -87,7 +89,10 @@ async function save(key, patch, revert) {
   inflight.set(key, (inflight.get(key) || 0) + 1);
   try {
     const s = await call('set_settings', patch);
-    if (s) store.settings = s;
+    if (s) {
+      store.settings = s;
+      notify('settings', s);  // main.js applies the theme; the update control takes the confirmed values
+    }
     return s;
   } catch (err) {
     toast('error', err.message);
@@ -118,6 +123,7 @@ function build() {
       <button type="button" class="icon-btn sheet-x" data-act="close" aria-label="Close settings">${icon('close')}</button>
     </div>
     <div class="sheet-scroll">
+      ${group('Appearance', '', 'set-appearance')}
       ${group('Output', `
         ${rowHtml('output_mode', 'Save to', '', 'set-row-col')}
         <div class="set-row set-row-col" data-row="output_dir">
@@ -145,6 +151,18 @@ function build() {
 
   content.querySelector('[data-act="close"]').addEventListener('click', () => overlay.close());
   content.addEventListener('click', onClick);
+
+  // Theme: applied at once, saved like every other key; a refusal restores the confirmed theme.
+  ctl.theme = mountThemeControl(content.querySelector('.set-appearance .set-card'), {
+    value: s.theme,
+    onChange: (name) => {
+      applyTheme(name);
+      save('theme', { theme: name }, () => {
+        ctl.theme.set(store.settings.theme);
+        applyTheme(store.settings.theme);
+      });
+    },
+  });
 
   // Output mode.
   ctl.output_mode = new Segmented({
@@ -263,6 +281,7 @@ function exampleName(suffix) {
 /** Show confirmed settings; controls with a save in flight keep their local value. */
 function refresh(s, justSaved = null) {
   if (!content.firstElementChild) return;
+  if (!busy('theme') && ctl.theme) ctl.theme.set(s.theme);
   if (!busy('output_mode') && ctl.output_mode) ctl.output_mode.set(s.output_mode);
   const dirRow = content.querySelector('[data-row="output_dir"]');
   dirRow.hidden = s.output_mode !== 'folder';

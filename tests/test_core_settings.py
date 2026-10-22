@@ -104,6 +104,18 @@ class SettingsTest(ScratchCase):
         raw = json.loads(s.paths.settings_file.read_text(encoding="utf-8"))
         self.assertNotIn("update_check_interval", raw)
 
+    def test_theme(self):
+        s = self.fresh("theme")
+        self.assertEqual(s.load()["theme"], "nova")
+        self.assertEqual(s.patch({"theme": "frost"})["theme"], "frost")
+        self.assertEqual(Settings(s.paths).load()["theme"], "frost")
+        self.assertEqual(s.patch({"theme": "neon"})["theme"], "nova")  # unknown names fall back to the default
+        self.assertEqual(s.patch({"theme": 7})["theme"], "nova")
+        s.paths.settings_file.write_text(json.dumps({"theme": "bloom"}), encoding="utf-8")
+        self.assertEqual(s.load()["theme"], "bloom")
+        s.paths.settings_file.write_text(json.dumps({"theme": "sunset"}), encoding="utf-8")
+        self.assertEqual(s.load()["theme"], "nova")
+
     def test_memory_only(self):
         paths = AppPaths(home=self.out / "memory")
         s = Settings(paths, persist=False)

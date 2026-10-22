@@ -1,16 +1,17 @@
 // Footer: the counters capsule (add files, counts, Clear split button or Stop) and the primary
-// Start pill, both lenses floating over the list.
+// Start pill (the kit's hero pill), both lenses floating over the list.
 //
 // Start morph: "Start" / "Start 3 files" (tinted) -> progress pill "3 of 7 · 1.8x" with a liquid
-// level (whole-batch progress) -> mint "Done" for 2.6 s -> back. The width follows the label by a
-// spring; the lens map is rebuilt by its ResizeObserver.
+// level (whole-batch progress) -> mint "Done" for 2.6 s -> back. The states and layers are the
+// kit's (`.hero[data-state]`, `.pm-*`); the width follows the label by a spring and the lens map
+// is rebuilt by its ResizeObserver.
 
 import { call, on } from './api.js';
 import { store, watch } from './store.js';
 import { Lens, gel } from '../vendor/liquid_ui/js/glass.js';
-import { Spring, SPRINGS, reducedMotion } from '../vendor/liquid_ui/js/motion.js';
+import { Spring, SPRINGS, springAnimate, reducedMotion, fadeIn, fadeOut } from '../vendor/liquid_ui/js/motion.js';
 import { icon } from './icons.js';
-import { bytes, nFiles, plural } from './format.js';
+import { bytes, nFiles, plural, percent } from './format.js';
 import { toast } from '../vendor/liquid_ui/js/toast.js';
 import { addItems } from './list.js';
 
@@ -32,12 +33,12 @@ export function initFooter() {
   startBtn.innerHTML = `
     <span class="pm-fill" aria-hidden="true"><span class="pm-liquid"></span></span>
     <span class="pm-layer pm-label">${icon('play')}<span class="pm-text">Start</span></span>
-    <span class="pm-layer pm-progress"><span class="pm-ptext tnum"></span></span>
+    <span class="pm-layer pm-progress"><span class="pm-ptext tnum"></span><span class="pm-pmeta tnum"></span></span>
     <span class="pm-layer pm-done">${icon('check')}<span>Done</span></span>`;
   startBtn.addEventListener('click', () => start());
 
   stats.innerHTML = `
-    <button type="button" class="icon-btn foot-add" data-act="add" aria-label="Add files" title="Add files (Ctrl+O)">${icon('plus')}</button>
+    <button type="button" class="icon-btn icon-btn-l icon-btn-plate foot-add" data-act="add" aria-label="Add files" title="Add files (Ctrl+O)">${icon('plus')}</button>
     <div class="foot-text">
       <b class="foot-count tnum"></b>
       <span class="foot-sub tnum"></span>
@@ -142,9 +143,7 @@ function setStartState(state, c, items, ffReady) {
       void startBtn.offsetWidth;
       startBtn.classList.remove('pm-instant');
     }
-    startBtn.dataset.state = state;
-    startBtn.classList.toggle('tint-accent', state === 'ready');
-    startBtn.classList.toggle('tint-mint', state === 'done');
+    startBtn.dataset.state = state;  // the kit tints the pill per state (accent while ready, mint when done)
   }
   startBtn.disabled = state === 'empty';
   startBtn.setAttribute('aria-disabled', String(state !== 'ready'));
@@ -164,8 +163,9 @@ function setStartState(state, c, items, ffReady) {
     const sum = finished + runningItems.reduce((a, i) => a + (i.progress || 0), 0);
     const pos = Math.min(n, finished + (runningItems.length ? 1 : 0)) || 1;
     const speed = runningItems.find((i) => i.speed);
-    const text = `${pos} of ${n}${speed ? ` · ${speed.speed}` : ''}`;
-    startBtn.querySelector('.pm-ptext').textContent = text;
+    // The kit's progress layer: position left, speed (or the batch percentage) right.
+    startBtn.querySelector('.pm-ptext').textContent = `${pos} of ${n}`;
+    startBtn.querySelector('.pm-pmeta').textContent = speed ? speed.speed : percent(sum / n);
     startBtn.style.setProperty('--p', (sum / n).toFixed(4));
     startBtn.setAttribute('aria-label', `Processing ${pos} of ${n}`);
   } else {
@@ -202,7 +202,7 @@ function showFooter(on) {
     if (!reducedMotion.matches) {
       statsLens.setStrength(0);
       startLens.setStrength(0);
-      foot.animate([{ transform: 'translateY(30px) scale(0.96)' }, { transform: 'none' }], { duration: 520, easing: 'cubic-bezier(.2,1.1,.3,1)' });
+      springAnimate(foot, [{ transform: 'translateY(30px) scale(0.96)' }, { transform: 'none' }], SPRINGS.bouncy, { fill: 'none' });
       startLens.animateStrength(1);
       statsLens.animateStrength(1);
     }
@@ -255,20 +255,22 @@ async function onStatsClick(e) {
 }
 
 const menu = () => document.getElementById('clear-menu');
-const menuOpen = () => !menu().hidden;
+const menuOpen = () => !menu().hidden && !menu().classList.contains('is-closing');
 
 function openMenu() {
   const m = menu();
   const { c } = counts();
   m.querySelector('[data-what="done"]').disabled = !c.done;
   m.querySelector('[data-what="errors"]').disabled = !c.error;
+  m.getAnimations().forEach((a) => a.cancel());
+  m.classList.remove('is-closing');
   m.hidden = false;
   const more = stats.querySelector('.split-more');
   const r = more.getBoundingClientRect();
   const f = foot.getBoundingClientRect();
   m.style.left = `${Math.max(0, Math.round(r.right - f.left - m.offsetWidth + 6))}px`;
   more.setAttribute('aria-expanded', 'true');
-  m.animate([{ opacity: 0, transform: 'translateY(8px) scale(.96)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  fadeIn(m);  // the kit's menu entrance
   const first = m.querySelector('.menu-item:not(:disabled)');
   first && first.focus();
   addEventListener('pointerdown', outside, true);
@@ -276,10 +278,10 @@ function openMenu() {
 
 function closeMenu() {
   const m = menu();
-  if (!m || m.hidden) return;
-  m.hidden = true;
+  if (!m || !menuOpen()) return;
   stats.querySelector('.split-more').setAttribute('aria-expanded', 'false');
   removeEventListener('pointerdown', outside, true);
+  fadeOut(m);  // the kit's menu exit; `hidden` follows once it has faded
 }
 
 function outside(e) {
