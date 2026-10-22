@@ -6,7 +6,7 @@
 
 **Drop files, give each its own settings, press Start. Compress to a quality or to a size limit in MB, upscale 2x / 4x without inventing pixels, convert between the common video, image and audio formats. Outputs carry no metadata. One portable exe, no installer, no account; updates itself from GitHub Releases.**
 
-[![Download](https://img.shields.io/badge/Download-MediaForge.exe-4d8dff?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/softoblivion/media-forge/releases/latest/download/MediaForge.exe)
+[![Download](https://img.shields.io/badge/Download-MediaForge.exe-ff8a4a?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/softoblivion/media-forge/releases/latest/download/MediaForge.exe)
 [![Release](https://img.shields.io/github/v/release/softoblivion/media-forge?display_name=release&label=latest&style=for-the-badge)](https://github.com/softoblivion/media-forge/releases/latest)
 
 ![Platform](https://img.shields.io/badge/platform-Windows_10_|_11-0078D6?logo=windows&logoColor=white)
@@ -87,7 +87,7 @@ up-to-date Windows 10). No installer, no admin rights.
 | **Per-file settings** | Every file opens its own panel; **Apply to all video / photos / audio** copies one file's settings to the others; the defaults for new files live in Settings. |
 | **Batch input** | Drag and drop of files and folders (one level deep), several at once; a native multi-select dialog; duplicates are added once. Up to three files run in parallel. |
 | **Outputs** | Next to the source or into one folder; a numbered suffix instead of an overwrite; **Show in folder**, **Open**, **Run again**; an optional folder opening and a sound when a batch finishes. |
-| **Liquid Glass UI** | A 3:4 portrait window with refracting glass controls, spring motion and an animated background; embedded Inter and Geist Mono fonts; animation stops when nothing moves. |
+| **Liquid Glass UI** | A 3:4 portrait window with refracting glass controls, spring motion and an animated background in one of four colour themes (Dusk, Nova, Frost, Bloom); embedded Unbounded and Geist Mono fonts; animation stops when nothing moves. |
 | **Portable** | One exe, one data folder next to it, no installer. The second launch brings the running window to the front. |
 | **Self-updating app** | New releases are detected on launch and then every 5 minutes, downloaded in the background (or on **Download**), verified by size and SHA-256 and installed on **Restart**. |
 
@@ -114,6 +114,7 @@ The gear in the title bar opens the settings sheet.
 
 | Setting | Meaning |
 |---|---|
+| **Theme** | Dusk, Nova (default), Frost or Bloom: the background colour family and the accent of the window. |
 | **Output** | Next to the source (`<name>_forge.<ext>`) or one folder of your choice. |
 | **Suffix** | The part added to the file name, `_forge` by default; may be empty when outputs go to a folder. |
 | **Parallel jobs** | 1 to 3 files at a time. |
@@ -232,7 +233,7 @@ Bundled into the executable:
 | [OpenCV](https://opencv.org/) with the contrib modules | Apache-2.0 |
 | [FSRCNN](https://github.com/Saafke/FSRCNN_Tensorflow) model files | Apache-2.0 |
 | [PyInstaller](https://pyinstaller.org/) bootloader | GPL-2.0-or-later with the bootloader exception |
-| [Inter](https://github.com/rsms/inter), [Geist Mono](https://github.com/vercel/geist-font) fonts | SIL Open Font License 1.1 |
+| [Unbounded](https://github.com/googlefonts/unbounded), [Geist Mono](https://github.com/vercel/geist-font) fonts | SIL Open Font License 1.1 |
 
 Downloaded at runtime from their official release channels, not redistributed with this project:
 

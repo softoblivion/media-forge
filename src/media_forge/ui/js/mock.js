@@ -158,8 +158,10 @@ export function createMock({ params, dispatch }) {
     open_when_done: false,
     sound_when_done: true,
     auto_download_updates: true,
+    theme: 'nova',
     defaults: clone(DEFAULTS),
   };
+  const THEMES = ['dusk', 'nova', 'frost', 'bloom'];
   let settings = loadSettings();
 
   function loadSettings() {
@@ -172,6 +174,7 @@ export function createMock({ params, dispatch }) {
     const known = (saved && typeof saved === 'object') ? Object.fromEntries(
       Object.entries(saved).filter(([k]) => k in BASE_SETTINGS)) : {};  // keys of older mock versions are dropped
     const s = { ...clone(BASE_SETTINGS), ...known };
+    if (!THEMES.includes(s.theme)) s.theme = BASE_SETTINGS.theme;
     s.defaults = {
       video: normalize('video', DEFAULTS.video, s.defaults && s.defaults.video),
       image: normalize('image', DEFAULTS.image, s.defaults && s.defaults.image),
@@ -216,6 +219,9 @@ export function createMock({ params, dispatch }) {
         case 'sound_when_done':
         case 'auto_download_updates':
           if (typeof v === 'boolean') next[k] = v;
+          break;
+        case 'theme':
+          next.theme = THEMES.includes(v) ? v : BASE_SETTINGS.theme;
           break;
         case 'defaults':
           if (v && typeof v === 'object') {

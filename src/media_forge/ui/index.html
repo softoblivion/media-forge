@@ -1,12 +1,15 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="nova">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Media Forge</title>
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <!-- The saved theme before the first paint (js/main.js writes the key on every confirmed settings object). -->
+  <script>try{var t=localStorage.getItem('media-forge.theme');if(['dusk','nova','frost','bloom'].indexOf(t)>=0)document.documentElement.dataset.theme=t;}catch(e){}</script>
   <!-- Liquid UI design kit: a vendored copy (vendor/liquid_ui/VENDORED.txt); fonts are named in its tokens.css only. -->
   <link rel="stylesheet" href="vendor/liquid_ui/css/tokens.css">
+  <link rel="stylesheet" href="vendor/liquid_ui/css/themes.css">
   <link rel="stylesheet" href="vendor/liquid_ui/css/base.css">
   <link rel="stylesheet" href="vendor/liquid_ui/css/scene.css">
   <link rel="stylesheet" href="vendor/liquid_ui/css/glass.css">
@@ -63,7 +66,7 @@
 
     <footer id="foot" class="foot" hidden>
       <div id="foot-stats" class="foot-stats"></div>
-      <button type="button" id="btn-start" class="start-pill" data-state="empty" aria-keyshortcuts="Control+Enter"></button>
+      <button type="button" id="btn-start" class="hero" data-state="empty" aria-keyshortcuts="Control+Enter"></button>
     </footer>
   </div>
 

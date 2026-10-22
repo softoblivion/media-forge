@@ -34,7 +34,7 @@ in `js/mock.js`) all code against it. A change here is a change for every worker
 | `cancel(id)` | `string` | `boolean` | cancels a queued or running item (back to `ready`) |
 | `cancel_all()` | | `number` | items cancelled |
 | `get_settings()` | | `Settings` | |
-| `set_settings(patch)` | `object` | `Settings` | partial global settings (3.5), validated; `defaults.<kind>` patches are normalised like item settings |
+| `set_settings(patch)` | `object` | `Settings` | partial global settings (3.5), validated; `defaults.<kind>` patches are normalised like item settings, `theme` like an enum (unknown -> default) |
 | `pick_output_dir()` | | `string \| null` | native folder dialog; the caller then calls `set_settings` |
 | `reveal(path)` | `string` | `boolean` | Explorer with the file selected |
 | `open_path(path)` | `string` | `boolean` | opens a file or folder with the shell default |
@@ -168,6 +168,7 @@ without NVENC support -> `auto`; `upscale_method` other than `lanczos` with `sca
   "open_when_done": false,
   "sound_when_done": true,
   "auto_download_updates": true,
+  "theme": "nova",
   "defaults": { "video": { ...VideoSettings }, "image": { ...ImageSettings }, "audio": { ...AudioSettings } }
 }
 ```
@@ -184,6 +185,10 @@ without NVENC support -> `auto`; `upscale_method` other than `lanczos` with `sca
 - `auto_download_updates`: default `true`; a release found by a check is downloaded in the background, installing
   still needs a restart. The check period is fixed at 5 minutes and is not a setting; a file written by an earlier
   version may still carry `update_check_interval`, which is ignored and dropped on the next save.
+- `theme`: one of the Liquid UI kit's four theme names, `dusk` | `nova` | `frost` | `bloom`; default `nova`. An
+  unknown value in a patch or in the file is replaced by the default (never refused). The page applies the
+  confirmed value (`applyTheme` of the kit) and mirrors it in `localStorage` so the next launch paints the right
+  theme before `ready()` returns; the shell only stores it.
 
 ### 3.6 Capabilities
 

@@ -23,6 +23,7 @@ log = logging.getLogger("media_forge.core.settings")
 
 SCHEMA_VERSION = 1
 OUTPUT_MODES = ("beside", "folder")
+THEMES = ("dusk", "nova", "frost", "bloom")  # the kit's four themes (BRIDGE_API.md 3.5)
 SUFFIX_MAX = 24
 _SUFFIX_BAD = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -39,6 +40,7 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "open_when_done": False,
     "sound_when_done": True,
     "auto_download_updates": True,
+    "theme": "nova",
 }
 
 
@@ -86,6 +88,8 @@ def validate(current: Mapping[str, Any], patch: Mapping[str, Any],
             new[key] = _check_suffix(value)
         elif key == "parallel_jobs":
             new[key] = catalog._int_clamp(value, 1, 3, GLOBAL_DEFAULTS[key])
+        elif key == "theme":
+            new[key] = value if value in THEMES else GLOBAL_DEFAULTS[key]
         else:  # booleans
             new[key] = value if isinstance(value, bool) else bool(current.get(key, GLOBAL_DEFAULTS[key]))
     if new["output_mode"] == "folder" and check_folder and ("output_mode" in patch or "output_dir" in patch):
