@@ -170,10 +170,10 @@ EDSR models on first use. Your files never leave the machine, and no job writes 
 
 The app checks GitHub Releases on every launch in the background and then every 5 minutes while it runs. A failed
 check is retried later with a growing wait of up to an hour, and nothing is checked without a network connection.
-A new version is shown on the version label in the title bar; **Download** fetches it (the app does it on its own
-unless **Download updates automatically** is turned off), verifies the byte size and the SHA-256 against the
-release's `SHA256SUMS`, and **Restart to update** installs it: a version downloaded in the background still
-installs only on Restart. The downloaded exe waits for the app to exit, keeps the old file as `MediaForge.exe.old`
+A new version opens a sheet with its release notes, size and date; **Install** fetches it (the app does it on its
+own unless **Download updates automatically** is turned off), verifies the byte size and the SHA-256 against the
+release's `SHA256SUMS`, and restarts the app once the file is verified; **Later** closes the sheet until you click
+the version label in the title bar. A version downloaded in the background still installs only on Restart. The downloaded exe waits for the app to exit, keeps the old file as `MediaForge.exe.old`
 until the new one has started, and relaunches it. If anything fails the current exe stays untouched. Every release
 ships two assets: `MediaForge.exe` and `SHA256SUMS`. Release notes live in [`docs/releases/`](docs/releases/).
 

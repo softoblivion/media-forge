@@ -201,10 +201,13 @@ and `onSettings` (store `settings`); `js/main.js` forwards every confirmed `sett
 
 In short: idle / up_to_date "Check for updates"; checking with an indeterminate bar; available with Installed /
 Latest rows, release notes and a tinted "Download"; downloading with a bar, percent and sizes; ready with a tinted
-"Restart to update" (disabled when `can_apply` is false); error with the message and "Try again". The first
-`available` of a version raises one toast with "View" (not when automatic download is on: the shell downloads by
-itself, ARCHITECTURE 5.7); `ready` one sticky toast with "Restart". The page never downloads or restarts on its own.
-Release-note links open in the default browser through `open_url`.
+"Restart to update" (disabled when `can_apply` is false); error with the message and "Try again". The notice of a
+newer version is the kit's update sheet (kit 3.1.0, section 10.1; the workspace template in `RECIPES.md` section
+1): it opens by itself the first time a version is reported, with the title "Media Forge X.Y.Z", the installed
+version, size and date, the release notes, a progress bar while the shell downloads (ARCHITECTURE 5.7) and the
+buttons Later / Install (then "Downloading… 42%", "Restart to update"); Later closes it until the pill is clicked.
+`ready` raises one sticky toast with "Restart" when the sheet is closed at that moment. The page never downloads or
+restarts on its own. Release-note links open in the default browser through `open_url`.
 
 ### 6.4 Keyboard
 

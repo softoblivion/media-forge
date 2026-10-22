@@ -61,7 +61,7 @@ media-forge/
   src/media_forge/models/            bundled model files (FSRCNN_x2.pb, FSRCNN_x4.pb) + MODELS.md (source, licence, hash)
   src/media_forge/shell/main.py      entry: single instance, window (3:4, frameless), drop listener, lifecycle
   src/media_forge/shell/bridge.py    pywebview js_api class, event pump
-  src/media_forge/shell/winutil.py   DWM corners, frameless resize with aspect lock, Explorer, message box, mutex
+  src/media_forge/shell/winutil.py   DWM corners and border colour, the fixed-size window hook, Explorer, message box, mutex
   src/media_forge/ui/                index.html, css/ (app tokens and app-only rules), js/ (incl. js/mock.js), assets/ (icon)
   src/media_forge/ui/vendor/liquid_ui/ vendored design kit: css/, js/, fonts/ (synced by _tools\vendor-sync.ps1; VENDORED.txt)
   tests/                     unittest suite (test_core_*, test_shell_*)
