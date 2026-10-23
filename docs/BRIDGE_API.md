@@ -1,8 +1,8 @@
 # Bridge API — the JS <-> Python contract
 
-Owner: integrator. This is the only definition of what the page may call and what the shell sends; the core
+This is the only definition of what the page may call and what the shell sends; the core
 (`CORE.md`), the shell (`src/media_forge/shell/bridge.py`) and the UI (`src/media_forge/ui/js/api.js`, the mock
-in `js/mock.js`) all code against it. A change here is a change for every worker.
+in `js/mock.js`) all code against it. A change here is a change for the core, the shell, the UI and the mock.
 
 ## 1. Transport
 
@@ -280,8 +280,7 @@ their own copy of what the engine accepts:
 
 ### 3.8 UpdateStatus
 
-The vendored `selfupdate` package's payload, unchanged (`D:\Projects\_shared\selfupdate\docs\SELF_UPDATE.md`,
-section 3): `stage` (`idle` `checking` `up_to_date` `available` `downloading` `ready` `error`), `current`,
+The vendored `selfupdate` package's payload, unchanged: `stage` (`idle` `checking` `up_to_date` `available` `downloading` `ready` `error`), `current`,
 `latest`, `notes`, `size`, `published_at`, `progress`, `message`, `checked_at`, `can_apply`.
 
 ## 4. Events (Python -> JS)

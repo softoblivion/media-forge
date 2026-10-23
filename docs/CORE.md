@@ -1,6 +1,6 @@
 # Core — probing, jobs, encoding, upscale
 
-Owner: core worker. Scope: `src/media_forge/core/**` except `selfupdate.py`, `src/media_forge/models/**`,
+Scope: `src/media_forge/core/**` except `selfupdate.py`, `src/media_forge/models/**`,
 `tests/test_core_*`, `tests/core_support.py`. Contract with the shell and the UI: `BRIDGE_API.md` (payload types,
 option tables, settings keys and defaults). This document records how the core does its work and is kept equal to
 the code; section 9 lists every point where the code differs from, or adds to, `BRIDGE_API.md`.
@@ -155,7 +155,7 @@ above 720 (and no upscale, no smaller fit chosen) the plan adds a 720p fit and r
 
 ### 3.4 Model upscale of a video (fsrcnn)
 
-EDSR is not offered for video (`catalog.VIDEO_UPSCALE_METHODS`, decision of 2026-10-21): measured at 0.04 fps for
+EDSR is not offered for video (`catalog.VIDEO_UPSCALE_METHODS`): measured at 0.04 fps for
 640x360 -> 2x on an i7-14700KF (26 s per frame), so even a short clip would take hours. A video patch with `edsr`
 is normalised to `fsrcnn`; the pipeline below still runs any `Model` and is used by the tests with FSRCNN.
 

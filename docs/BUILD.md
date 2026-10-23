@@ -1,7 +1,6 @@
 # Build, run and troubleshoot
 
-Toolchain and versions follow the pywebview family baseline of `D:\Projects\_workspace\RECIPES.md`, section 4;
-the versions below are the ones verified on 2026-10-21.
+The toolchain versions below are the ones verified on 2026-10-21.
 
 ## 1. Toolchain
 
@@ -53,7 +52,7 @@ UI alone in a browser with the JS mock: `python -m http.server 5173 --directory 
 
 Checking the real window from a script (no clicks): a launcher that sets
 `webview.settings["REMOTE_DEBUGGING_PORT"] = <port>` before importing `media_forge.shell.main` and then calls
-`main([...])`, driven over CDP with Node 24 (`D:\Projects\_workspace\NOTES.md`, "Driving a pywebview window"). With
+`main([...])`, driven over CDP with Node 24. With
 `--debug` the DevTools window is a second `page` target: pick the target whose URL starts with
 `http://127.0.0.1:`.
 
@@ -112,13 +111,11 @@ HEIF were available, the bundled FSRCNN models were found, and closing the windo
 
 ## 5. Release
 
-Per `D:\Projects\_workspace\CONVENTIONS.md`, "Versioning and releases": notes in `docs/releases/vX.Y.Z.md`, version
-bump in `src\media_forge\__init__.py`, commit `Release vX.Y.Z`, tag `vX.Y.Z` on `dev`, GitHub Release titled
+Notes in `docs/releases/vX.Y.Z.md`, version bump in `src\media_forge\__init__.py`, commit `Release vX.Y.Z`, tag `vX.Y.Z` on `dev`, GitHub Release titled
 `vX.Y.Z` with exactly two assets, `MediaForge.exe` and `SHA256SUMS` from `release\` (the self-updater looks both up
-by name). The first publication and every major version need the user's explicit yes; afterwards a finished minor or
-patch version is released as soon as tests, build, the pre-publish checklist and the notes are in order.
+by name). A version is released once the tests, the build, the pre-publish checklist and the notes are in order.
 
-Self-update end-to-end test before a release that touches the update path (`RECIPES.md` 1): build N and N+1, serve
+Self-update end-to-end test before a release that touches the update path: build N and N+1, serve
 `latest.json`, the N+1 exe and its `SHA256SUMS` with `python -m http.server 8765`, set
 `MEDIA_FORGE_RELEASE_URL=http://127.0.0.1:8765/latest.json`, run N from a scratch folder, Download, Restart; N+1
 must run from the same path, `MediaForge.exe.old` must be gone within about 15 s, the data folder untouched.
@@ -147,8 +144,7 @@ must run from the same path, `MediaForge.exe.old` must be gone within about 15 s
 
 ## 7. Troubleshooting
 
-Symptom / cause / fix entries specific to this project; cross-project ones go to
-`D:\Projects\_workspace\NOTES.md`.
+Symptom / cause / fix entries for this project.
 
 ### The frozen exe shows two processes
 - Symptom: Task Manager lists two `MediaForge.exe`; ending the first one leaves the window running.
@@ -160,5 +156,5 @@ Symptom / cause / fix entries specific to this project; cross-project ones go to
 - Symptom: dropping files on the window does nothing.
 - Cause: pywebview attaches `pywebviewFullPath` only when a Python-side DOM `drop` listener exists; the shell adds
   it when the page has loaded (`window.events.loaded`). A drop before that, or a synthetic `DragEvent`, carries no
-  path (`NOTES.md`, "Dropped files have no path in the page").
+  path.
 - Fix: check `app.log` for "drag and drop is not available"; real OS drops only.

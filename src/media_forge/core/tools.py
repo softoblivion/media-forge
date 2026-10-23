@@ -1,6 +1,6 @@
 """ffmpeg / ffprobe discovery and download, verified HTTP downloads, capability probe (BRIDGE_API.md 3.6).
 
-Discovery order (RECIPES.md 3): `<data>/bin` first, then PATH. When neither has both tools, the static build of
+Discovery order: `<data>/bin` first, then PATH. When neither has both tools, the static build of
 yt-dlp/FFmpeg-Builds is downloaded once, verified against the release's `checksums.sha256`, and the two exes are
 extracted through `.part` files.
 """

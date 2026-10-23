@@ -1,10 +1,6 @@
 <div align="center">
 
-<img src="src/media_forge/ui/assets/icon.svg" alt="" width="96" height="96">
-
-# Media Forge: compress, upscale and convert video, photos and audio on Windows
-
-**Drop files, give each its own settings, press Start. Compress to a quality or to a size limit in MB, upscale 2x / 4x without inventing pixels, convert between the common video, image and audio formats. Outputs carry no metadata. One portable exe, no installer, no account; updates itself from GitHub Releases.**
+<img src="docs/assets/hero.svg" alt="Media Forge" width="100%">
 
 [![Download](https://img.shields.io/badge/Download-MediaForge.exe-ff8a4a?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/softoblivion/media-forge/releases/latest/download/MediaForge.exe)
 [![Release](https://img.shields.io/github/v/release/softoblivion/media-forge?display_name=release&label=latest&style=for-the-badge)](https://github.com/softoblivion/media-forge/releases/latest)
@@ -19,6 +15,8 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5391FE?logo=powershell&logoColor=white)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
+**Compress, upscale and convert video, photos and audio on Windows: drop files, give each its own settings, press Start. Compress to a quality or to a size limit in MB, upscale 2x / 4x without inventing pixels, convert between the common video, image and audio formats. Outputs carry no metadata. One portable exe, no installer, no account; updates itself from GitHub Releases.**
+
 <img src="docs/assets/screenshot.png" alt="Media Forge main window with three queued files" width="42%">
 <img src="docs/assets/settings.png" alt="Per-file settings of a video" width="42%">
 
@@ -27,22 +25,6 @@
 </div>
 
 ---
-
-## Contents
-
-- [Why Media Forge](#why-media-forge)
-- [Quick start](#quick-start)
-- [Features](#features)
-- [Usage](#usage)
-- [Settings](#settings)
-- [Formats and codecs](#formats-and-codecs)
-- [Size limit](#size-limit)
-- [Data and privacy](#data-and-privacy)
-- [Updates](#updates)
-- [Building from source](#building-from-source)
-- [Project structure](#project-structure)
-- [Third-party components](#third-party-components)
-- [License](#license)
 
 ## Why Media Forge
 
@@ -58,7 +40,8 @@
   Only the ICC colour profile is kept.
 - **Free and open source.** GPL-3.0, no trial, no watermark, no paid tier. The source is here; build it yourself
   if you prefer.
-- **Portable.** One `MediaForge.exe` with a data folder next to it. Move the folder, move the app.
+- **Portable.** One `MediaForge.exe` with a data folder next to it, no installer. Move the folder, move the app.
+  The second launch brings the running window to the front.
 
 ## Quick start
 
@@ -88,94 +71,20 @@ up-to-date Windows 10). No installer, no admin rights.
 | **Batch input** | Drag and drop of files and folders (one level deep), several at once; a native multi-select dialog; duplicates are added once. Up to three files run in parallel. |
 | **Outputs** | Next to the source or into one folder; a numbered suffix instead of an overwrite; **Show in folder**, **Open**, **Run again**; an optional folder opening and a sound when a batch finishes. |
 | **Liquid Glass UI** | A 3:4 portrait window with refracting glass controls, spring motion and an animated background in one of four colour themes (Dusk, Nova, Frost, Bloom); embedded Unbounded and Geist Mono fonts; animation stops when nothing moves. |
-| **Portable** | One exe, one data folder next to it, no installer. The second launch brings the running window to the front. |
 | **Self-updating app** | New releases are detected on launch and then every 5 minutes, downloaded in the background (or on **Download**), verified by size and SHA-256 and installed on **Restart**. |
 
-## Usage
+## Documentation
 
-1. Drop files on the window, press **Choose files** or `Ctrl+O`. Each file is probed in the background and shows
-   its thumbnail, dimensions, duration, codec and size.
-2. Click a file to open its settings: format and codec, encoder, scale and upscale method, quality or size limit,
-   frame rate, audio, metadata. The line under the file name shows what will be written.
-3. Press **Start** (`Ctrl+Enter`). Each card shows the stage, progress, speed and ETA; a running job can be
-   cancelled, a finished or failed one run again.
-4. **Show in folder** reveals the output in Explorer; **Clear done** removes finished files from the list.
-
-| Shortcut | Action |
+| Document | What it covers |
 |---|---|
-| `Ctrl+O` | Choose files |
-| `Ctrl+Enter` | Start every ready file |
-| `Delete` | Remove the selected file |
-| `Esc` | Close a panel or a popover |
-
-## Settings
-
-The gear in the title bar opens the settings sheet.
-
-| Setting | Meaning |
-|---|---|
-| **Theme** | Dusk, Nova (default), Frost or Bloom: the background colour family and the accent of the window. |
-| **Output** | Next to the source (`<name>_forge.<ext>`) or one folder of your choice. |
-| **Suffix** | The part added to the file name, `_forge` by default; may be empty when outputs go to a folder. |
-| **Parallel jobs** | 1 to 3 files at a time. |
-| **Open the folder when done** | Opens Explorer with the last output selected after a batch. |
-| **Sound when done** | A short chime when a batch finishes. |
-| **Defaults for new files** | The per-kind settings every new video, photo or audio file starts with. |
-| **Download updates automatically** | On by default: a new release is downloaded in the background; turn it off to download only on **Download**. Installing always needs **Restart**. |
-
-## Formats and codecs
-
-| Kind | Output formats | Codecs and options |
-|---|---|---|
-| Video | MP4, MKV, WebM, MOV, GIF; audio extraction to MP3, M4A, Opus, FLAC, WAV | H.264, H.265 / HEVC, AV1 (CPU or NVENC), VP9, ProRes, stream copy; scale original / 2x / 4x / fit 1080p, 720p, 480p; frame rate keep / 24 / 30 / 60; audio keep / AAC 96 to 320 kbps / none; GIF is capped at 15 fps |
-| Photo | JPEG, PNG, WebP, AVIF, TIFF, BMP, HEIC | quality 0 to 100 for the lossy formats (PNG is optimised instead); scale original / 2x / 4x / ½ / ¼ |
-| Audio | MP3, M4A (AAC), Opus, OGG (Vorbis), FLAC, WAV | 64 to 320 kbps (Opus up to 256; FLAC and WAV are lossless); sample rate keep / 44.1 / 48 kHz; mono / stereo; loudness normalisation to -16 LUFS |
-
-Upscale methods for 2x / 4x: **Lanczos** (resampling with a light sharpen), **FSRCNN** (small deterministic
-super-resolution network, bundled) and, for photos, **EDSR** (larger network, downloaded once, slow on a CPU, best
-detail). A video patch that asks for EDSR is written with FSRCNN instead.
-
-## Size limit
-
-The limit is a hard cap on the output file, set per file in MB:
-
-- **Video:** the bitrate is computed from the duration and the audio share, encoded in two passes (or NVENC VBR
-  with a cap), and the job retries once with a lower target when the result still exceeds the cap.
-- **Photo:** the quality is searched down to the limit; when the lowest acceptable quality is still too large, the
-  image is downscaled step by step.
-- **Audio:** the bitrate comes from the duration, rounded down to the nearest value the format offers.
-
-A file whose cap cannot be met (a lossless format, a limit below what the format can produce) ends with an error
-that says so instead of a file that breaks the limit.
-
-## Data and privacy
-
-All runtime data lives in `media-forge_data\` next to `MediaForge.exe` (override with the `MEDIA_FORGE_HOME`
-environment variable); nothing is written to the user profile:
-
-| Path | Content |
-|---|---|
-| `bin\` | `ffmpeg.exe`, `ffprobe.exe` when none is on `PATH`, with their version record |
-| `models\` | EDSR model files downloaded on first use, with their source and hash |
-| `settings.json` | preferences and the per-kind defaults |
-| `cache\` | thumbnails of queued files and the working files of running jobs |
-| `logs\` | `app.log` and the full FFmpeg output of a failed job |
-| `webview\` | WebView2 profile |
-| `updates\` | downloaded app updates and `apply.log` |
-
-Network traffic goes to GitHub only: the release check and download, the FFmpeg build when none is on `PATH`, the
-EDSR models on first use. Your files never leave the machine, and no job writes a provenance marker of any kind.
-
-## Updates
-
-The app checks GitHub Releases on every launch in the background and then every 5 minutes while it runs. A failed
-check is retried later with a growing wait of up to an hour, and nothing is checked without a network connection.
-A new version opens a sheet with its release notes, size and date; **Install** fetches it (the app does it on its
-own unless **Download updates automatically** is turned off), verifies the byte size and the SHA-256 against the
-release's `SHA256SUMS`, and restarts the app once the file is verified; **Later** closes the sheet until you click
-the version label in the title bar. A version downloaded in the background still installs only on Restart. The downloaded exe waits for the app to exit, keeps the old file as `MediaForge.exe.old`
-until the new one has started, and relaunches it. If anything fails the current exe stays untouched. Every release
-ships two assets: `MediaForge.exe` and `SHA256SUMS`. Release notes live in [`docs/releases/`](docs/releases/).
+| [User guide](docs/USER_GUIDE.md) | Usage, keyboard, settings, formats and codecs, size limit, data folder, updates |
+| [Architecture](docs/ARCHITECTURE.md) | Stack, repository layout, modules, runtime data, behaviour, window |
+| [Bridge API](docs/BRIDGE_API.md) | The JS ↔ Python contract: methods, events, payload types, option tables |
+| [Core](docs/CORE.md) | Probing, FFmpeg command lines, quality mapping, size targeting, upscale, jobs |
+| [UI design](docs/UI_DESIGN.md) | Liquid Glass material, background, motion, components, copy rules |
+| [Build](docs/BUILD.md) | Running from source, tests, building the exe, releasing, troubleshooting |
+| [Release notes](docs/releases/) | What changed in every version |
+| [Third-party components](docs/THIRD_PARTY.md) | What is bundled or downloaded, with licences |
 
 ## Building from source
 
@@ -194,53 +103,10 @@ The script creates `.venv`, installs the dependencies, runs the unit tests, draw
 |---|---|
 | Run from source | `set MEDIA_FORGE_HOME=%TEMP%\mf_scratch` then `scripts\run_dev.bat` (`--fake` runs a simulated engine without touching files) |
 | Unit tests | `set MEDIA_FORGE_HOME=%TEMP%\mf_tests` and `set PYTHONPATH=src`, then `.venv\Scripts\python.exe -m unittest discover -s tests -t .` |
-| Headless job | `.venv\Scripts\python.exe -m media_forge.core.cli <file> [--set key=value ...]` |
 | UI in a browser with mock data | `python -m http.server 5173 --directory src\media_forge\ui`, then `http://localhost:5173/?mock=1` |
 
-Architecture, the JS ↔ Python contract, the core pipelines, the UI and build notes:
-[ARCHITECTURE](docs/ARCHITECTURE.md) · [BRIDGE_API](docs/BRIDGE_API.md) · [CORE](docs/CORE.md) ·
-[UI_DESIGN](docs/UI_DESIGN.md) · [BUILD](docs/BUILD.md)
-
-## Project structure
-
-```
-media-forge/
-├── src/media_forge/
-│   ├── core/          probing, FFmpeg command lines, size targeting, upscale, jobs, settings, paths, CLI
-│   ├── models/        bundled FSRCNN model files with their source and hash
-│   ├── shell/         entry point, frameless 3:4 window, JS ↔ Python bridge, Windows helpers
-│   ├── ui/            HTML / CSS / JS interface: file list, per-file panels, settings sheet, update popover
-│   └── vendor/        bundled self-update package
-├── tests/             unittest suite (core and shell)
-├── build/             PyInstaller spec, build script, icon generator
-├── scripts/           development run
-└── docs/              architecture, module docs, API contract, build notes, release notes, decisions
-```
-
-## Third-party components
-
-Bundled into the executable:
-
-| Component | License |
-|---|---|
-| [CPython](https://www.python.org/) | PSF-2.0 |
-| [pywebview](https://github.com/r0x0r/pywebview) | BSD-3-Clause |
-| [pythonnet](https://github.com/pythonnet/pythonnet), clr_loader | MIT |
-| bottle, proxy_tools | MIT |
-| [NumPy](https://numpy.org/) | BSD-3-Clause |
-| [Pillow](https://python-pillow.org/) | MIT-CMU |
-| [pillow-heif](https://github.com/bigcat88/pillow_heif) with libheif | BSD-3-Clause, LGPL-3.0 |
-| [OpenCV](https://opencv.org/) with the contrib modules | Apache-2.0 |
-| [FSRCNN](https://github.com/Saafke/FSRCNN_Tensorflow) model files | Apache-2.0 |
-| [PyInstaller](https://pyinstaller.org/) bootloader | GPL-2.0-or-later with the bootloader exception |
-| [Unbounded](https://github.com/googlefonts/unbounded), [Geist Mono](https://github.com/vercel/geist-font) fonts | SIL Open Font License 1.1 |
-
-Downloaded at runtime from their official release channels, not redistributed with this project:
-
-| Component | License |
-|---|---|
-| [FFmpeg](https://ffmpeg.org/) ([yt-dlp/FFmpeg-Builds](https://github.com/yt-dlp/FFmpeg-Builds)), only when none is on `PATH` | GPL |
-| [EDSR](https://github.com/Saafke/EDSR_Tensorflow) model files, on first use | Apache-2.0 |
+A single job runs without the window through
+`.venv\Scripts\python.exe -m media_forge.core.cli <file> [--set key=value ...]`.
 
 ## License
 

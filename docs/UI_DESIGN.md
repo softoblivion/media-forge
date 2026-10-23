@@ -1,11 +1,11 @@
 # UI design — Liquid Glass for Media Forge
 
-Owner: ui worker. Scope: everything under `src/media_forge/ui/`. The JS <-> Python contract is `docs/BRIDGE_API.md`;
+Scope: everything under `src/media_forge/ui/`. The JS <-> Python contract is `docs/BRIDGE_API.md`;
 this document describes the page that codes against the shared design system and where Media Forge differs. The
 design system itself (tokens, fonts, themes, material, buttons, motion template, controls, overlays, toasts, title
 bar, background, the version pill with the update popover, the theme row) is the shared Liquid UI kit, vendored at
-`src/media_forge/ui/vendor/liquid_ui/` (version in its `VENDORED.txt`, 3.0.0 since Media Forge 2.0.0); its owning
-document is `D:\Projects\_shared\liquid_ui\docs\LIQUID_UI.md`, cited below as "the kit, section N". This document
+`src/media_forge/ui/vendor/liquid_ui/` (version in its `VENDORED.txt`, 3.0.0 since Media Forge 2.0.0); the kit's own
+documentation is cited below as "the kit, section N". This document
 records what Media Forge uses, its own screen and where it differs.
 
 ## 1. Sources
@@ -18,7 +18,7 @@ records what Media Forge uses, its own screen and where it differs.
 | Apple, WWDC25 "Meet Liquid Glass"; kube.io refraction article | Through the kit: lensing rather than scattering, materialize by ramping the lensing, controls lift into glass only while touched, tint only the primary action, scroll edge effect instead of hard clipping. |
 
 The kit started as this app's own UI (which took its material, springs and several controls from Media Saver); it
-moved into `_shared` without a visual change. Kit 3.0.0 (the design pass of 2026-10-21) went the other way: Media
+became a shared kit without a visual change. Kit 3.0.0 (the design pass of 2026-10-21) went the other way: Media
 Forge's Start pill became the kit's hero pill and its buttons the model of the kit's button system, and the app
 dropped its own scene colours, button rules and accent tokens for the kit's themes.
 
@@ -103,8 +103,7 @@ row or drawer animation, the speck canvas stops.
 
 ## 5. Background — the kit, section 7
 
-`js/main.js` calls `initBackground(#scene)` with no options: the kit's `deep` treatment (the user's choice of
-2026-10-21) reads the theme tokens of the root (`--bg-top / mid / bottom`, `--scene-hue`, `--scene-accent`,
+`js/main.js` calls `initBackground(#scene)` with no options: the kit's `deep` treatment reads the theme tokens of the root (`--bg-top / mid / bottom`, `--scene-hue`, `--scene-accent`,
 `--scene-line`) and builds the base gradient, two soft fields of the hue, one small field of the accent, the
 contour and caustic lines, the floor pool, the specks, the light sweep, vignette and grain. `applyTheme()` calls
 `retint()`, so a theme switch in the settings sheet recolours the scene in place. The app's own four colour fields
@@ -202,8 +201,7 @@ and `onSettings` (store `settings`); `js/main.js` forwards every confirmed `sett
 In short: idle / up_to_date "Check for updates"; checking with an indeterminate bar; available with Installed /
 Latest rows, release notes and a tinted "Download"; downloading with a bar, percent and sizes; ready with a tinted
 "Restart to update" (disabled when `can_apply` is false); error with the message and "Try again". The notice of a
-newer version is the kit's update sheet (kit 3.1.0, section 10.1; the workspace template in `RECIPES.md` section
-1): it opens by itself the first time a version is reported, with the title "Media Forge X.Y.Z", the installed
+newer version is the kit's update sheet (kit 3.1.0, section 10.1): it opens by itself the first time a version is reported, with the title "Media Forge X.Y.Z", the installed
 version, size and date, the release notes, a progress bar while the shell downloads (ARCHITECTURE 5.7) and the
 buttons Later / Install (then "Downloading… 42%", "Restart to update"); Later closes it until the pill is clicked.
 `ready` raises one sticky toast with "Restart" when the sheet is closed at that moment. The page never downloads or
@@ -249,7 +247,7 @@ adds them through `add_files`. Visible `:focus-visible` rings everywhere (the th
 
 ## 8. Copy rules
 
-- Neutral and factual (`_workspace/CONVENTIONS.md`, "UI copy"): say what a control does or what happened, no filler,
+- Neutral and factual: say what a control does or what happened, no filler,
   no exclamation marks. English (US), sentence case: "Choose files", "Start", "Clear done", "Show in folder", "Open",
   "Retry", "Apply to all video", "Remove", "Start now", "Cancel", "Check for updates", "Restart to update", "Try again".
   The theme row's copy is the kit's: "Theme", "Background colour and accent of the window", "Dusk", "Nova", "Frost",

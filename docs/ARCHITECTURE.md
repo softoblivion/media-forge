@@ -20,13 +20,13 @@ A Windows desktop utility, shipped as one portable `MediaForge.exe`, that takes 
 
 | Layer | Choice | Why |
 |---|---|---|
-| Window / UI host | pywebview 6.2.1, `edgechromium` backend (WebView2) | The workspace default (`_workspace\RECIPES.md`, section 4): Chromium is the only engine where `backdrop-filter: url(#svg-filter)` gives real refraction; WebView2 ships with Windows 11. |
-| UI | Plain HTML / CSS / JS (ES modules), no build step, no network, fonts embedded | Same as Media Saver and Frame Notes; the glass material, controls, background, fonts and the version / update popover come from the shared design kit `liquid_ui`, vendored as `ui/vendor/liquid_ui` (master in the workspace's `_shared`, docs `LIQUID_UI.md` there; never edited inside this repository). |
+| Window / UI host | pywebview 6.2.1, `edgechromium` backend (WebView2) | Chromium is the only engine where `backdrop-filter: url(#svg-filter)` gives real refraction; WebView2 ships with Windows 11. |
+| UI | Plain HTML / CSS / JS (ES modules), no build step, no network, fonts embedded | Same as Media Saver and Frame Notes; the glass material, controls, background, fonts and the version / update popover come from the shared design kit `liquid_ui`, vendored as `ui/vendor/liquid_ui` (a synced copy of the kit, version in its `VENDORED.txt`; never edited inside this repository). |
 | Backend | Python 3.14 | pywebview, pythonnet, PyInstaller, NumPy, Pillow and OpenCV all ship 3.14 wheels. |
-| Video / audio | `ffmpeg.exe` + `ffprobe.exe` as subprocesses: `media-forge_data\bin` first, then PATH, else downloaded once from yt-dlp/FFmpeg-Builds (`RECIPES.md`, section 3) | Every codec and container the app offers is one ffmpeg invocation; NVENC (H.264 / HEVC / AV1) is used when the machine has it. |
+| Video / audio | `ffmpeg.exe` + `ffprobe.exe` as subprocesses: `media-forge_data\bin` first, then PATH, else downloaded once from yt-dlp/FFmpeg-Builds | Every codec and container the app offers is one ffmpeg invocation; NVENC (H.264 / HEVC / AV1) is used when the machine has it. |
 | Images | Pillow (JPEG, PNG, WebP, AVIF, TIFF, BMP; HEIC through `pillow-heif` when importable) | AVIF is built into Pillow 11+ wheels; everything is in-process, no temp files. |
 | Upscale | OpenCV (`opencv-contrib-python-headless`, `dnn_superres`) + NumPy; FSRCNN models bundled, EDSR downloaded on demand | Deterministic CNN super-resolution, CPU only, no GAN, no diffusion, no prompt. Video frames stream through ffmpeg pipes. |
-| Self-update | GitHub Releases of `softoblivion/media-forge` (assets `MediaForge.exe` + `SHA256SUMS`) through the vendored `selfupdate` package: check on launch and then every 5 minutes (fixed period, no setting), verified download, rename-in-place swap on restart (`_workspace\RECIPES.md`, section 1) | The workspace's shared updater; no installer, no helper process. |
+| Self-update | GitHub Releases of `softoblivion/media-forge` (assets `MediaForge.exe` + `SHA256SUMS`) through the vendored `selfupdate` package: check on launch and then every 5 minutes (fixed period, no setting), verified download, rename-in-place swap on restart | A shared updater package, vendored unchanged; no installer, no helper process. |
 | Packaging | PyInstaller one-file, windowed, own icon | One exe to double-click. |
 
 ## 3. Repository layout
@@ -39,8 +39,11 @@ media-forge/
   docs/CORE.md               core modules: probing, command lines, quality mapping, size targeting, upscale, jobs
   docs/UI_DESIGN.md          design system, Liquid Glass material, background, motion, components
   docs/BUILD.md              dev run, tests, build, troubleshooting
+  docs/USER_GUIDE.md         usage, keyboard, settings, formats, size limit, data folder, updates
+  docs/THIRD_PARTY.md        bundled and downloaded components with their licences
   docs/releases/vX.Y.Z.md    release notes
-  docs/decisions/            project decision records
+  docs/assets/               README banner, social preview, screenshots
+  .github/ISSUE_TEMPLATE/    bug report and feature request forms
   src/media_forge/__init__.py        __version__ (the only place the version lives)
   src/media_forge/core/paths.py      AppPaths: data folder, atomic writes (the only module that builds data paths)
   src/media_forge/core/settings.py   global settings + per-kind default settings, persistence, validation
@@ -56,14 +59,14 @@ media-forge/
   src/media_forge/core/engine.py     facade used by the bridge (section 6)
   src/media_forge/core/cli.py        headless harness: python -m media_forge.core.cli <file> [--set key=value ...]
   src/media_forge/core/selfupdate.py Media Forge's configuration of the vendored self-updater (repo, asset, names)
-  src/media_forge/vendor/selfupdate/ vendored copy of D:\Projects\_shared\selfupdate (never edited here; synced by
-                                     _tools\vendor-sync.ps1; VENDORED.txt names the version)
+  src/media_forge/vendor/selfupdate/ vendored copy of the shared self-update package (never edited here; synced
+                                     from its upstream; VENDORED.txt names the version)
   src/media_forge/models/            bundled model files (FSRCNN_x2.pb, FSRCNN_x4.pb) + MODELS.md (source, licence, hash)
   src/media_forge/shell/main.py      entry: single instance, window (3:4, frameless), drop listener, lifecycle
   src/media_forge/shell/bridge.py    pywebview js_api class, event pump
   src/media_forge/shell/winutil.py   DWM corners and border colour, the fixed-size window hook, Explorer, message box, mutex
   src/media_forge/ui/                index.html, css/ (app tokens and app-only rules), js/ (incl. js/mock.js), assets/ (icon)
-  src/media_forge/ui/vendor/liquid_ui/ vendored design kit: css/, js/, fonts/ (synced by _tools\vendor-sync.ps1; VENDORED.txt)
+  src/media_forge/ui/vendor/liquid_ui/ vendored design kit: css/, js/, fonts/ (synced from its upstream; VENDORED.txt)
   tests/                     unittest suite (test_core_*, test_shell_*)
   build/                     entry.py, MediaForge.spec, build.ps1, make_icon.py, icon.ico
   scripts/run_dev.bat        run from source
@@ -75,15 +78,15 @@ source (`media-forge_data/`) are not tracked.
 Rules for all code: comments, docs and user-facing strings in English; tests use `unittest`
 (`python -m unittest discover -s tests -t .` with `PYTHONPATH=src`). Each module keeps its owning document current.
 
-Module table (owner = the session or worker that may write there during a task; `_workspace\PARALLEL.md`):
+Module table (the owning doc of a module defines its contract and is changed first, then the code):
 
-| Module | Path | Owning doc | Owner |
-|---|---|---|---|
-| Core | `src/media_forge/core/**` except `selfupdate.py`, `src/media_forge/models/**`, `tests/test_core_*` | `CORE.md` | core worker |
-| Self-update adapter | `src/media_forge/core/selfupdate.py`, `src/media_forge/vendor/**` (synced only), `tests/test_shell_selfupdate.py` | `ARCHITECTURE.md` 5.7 | shell worker |
-| UI | `src/media_forge/ui/**` | `UI_DESIGN.md` | ui worker |
-| Shell and build | `src/media_forge/shell/**`, `src/media_forge/__init__.py`, `tests/test_shell_*`, `build/`, `scripts/`, `pyproject.toml`, `requirements*.txt`, `BUILD.md` | `BUILD.md` | shell worker |
-| Contracts and docs | `README.md`, `ARCHITECTURE.md`, `BRIDGE_API.md`, release notes | `ARCHITECTURE.md`, `BRIDGE_API.md` | integrator |
+| Module | Path | Owning doc |
+|---|---|---|
+| Core | `src/media_forge/core/**` except `selfupdate.py`, `src/media_forge/models/**`, `tests/test_core_*` | `CORE.md` |
+| Self-update adapter | `src/media_forge/core/selfupdate.py`, `src/media_forge/vendor/**` (synced only), `tests/test_shell_selfupdate.py` | `ARCHITECTURE.md` 5.7 |
+| UI | `src/media_forge/ui/**` | `UI_DESIGN.md` |
+| Shell and build | `src/media_forge/shell/**`, `src/media_forge/__init__.py`, `tests/test_shell_*`, `build/`, `scripts/`, `pyproject.toml`, `requirements*.txt`, `BUILD.md` | `BUILD.md` |
+| Contracts and docs | `README.md`, `ARCHITECTURE.md`, `BRIDGE_API.md`, release notes | `ARCHITECTURE.md`, `BRIDGE_API.md` |
 
 ## 4. Runtime data (portable)
 
@@ -103,13 +106,13 @@ Module table (owner = the session or worker that may write there during a task; 
 
 Outputs: next to the source (`<stem>_forge.<ext>`, then `<stem>_forge (2).<ext>` ...) in `output_mode = "beside"`,
 or in `settings.output_dir` in mode `"folder"`. No path depends on `%LOCALAPPDATA%`, `%USERPROFILE%` or a drive
-letter (`_workspace\CONVENTIONS.md`, "Portable projects").
+letter: the app is portable, and moving its folder moves all of its data.
 
 ## 5. Behaviour
 
 ### 5.1 Adding files
 
-Dropped (the shell reads `pywebviewFullPath` through a Python-side DOM listener, `_workspace\NOTES.md`) or picked
+Dropped (the shell reads `pywebviewFullPath` through a Python-side DOM listener, since a drop event in the page carries no file path) or picked
 in the native dialog. Each path becomes an `Item` (`BRIDGE_API.md`, 3.2) with the default settings of its kind,
 status `probing`; a background thread runs ffprobe / Pillow, builds the thumbnail and emits the `item` event with
 status `ready`. A path that is not a media file becomes status `error` with a message. Duplicate paths are added
@@ -152,7 +155,7 @@ Off = the source metadata is copied as far as the target format allows.
 ### 5.6 Tools and models
 
 On start the engine looks for ffmpeg / ffprobe (`bin/` first, PATH second); when both are missing it downloads
-the static build in the background (`RECIPES.md`, 3) and shows status `downloading`; jobs wait. Capabilities
+the static build from yt-dlp/FFmpeg-Builds in the background and shows status `downloading`; jobs wait. Capabilities
 (`BRIDGE_API.md`, 3.6) are probed once per launch: encoder list, NVENC availability by a 1-frame test encode,
 AVIF / HEIF support, model files present. FSRCNN x2 / x4 ship inside the exe; EDSR x2 / x4 (about 38 MB each)
 are downloaded on first use into `models/` and verified by SHA-256 (`CORE.md`, 4).
@@ -190,8 +193,7 @@ Events emitted by the engine: `item`, `item_removed`, `settings`, `capabilities`
 
 ## 7. Window
 
-Frameless, 3:4 portrait, fixed size (global rule "Fixed window size by default", 2026-10-21; 1.0 was resizable
-with an aspect lock): 630 x 840 logical pixels, scaled down by whole steps that keep 3:4 when the monitor work
+Frameless, 3:4 portrait, fixed size (1.0 was resizable with an aspect lock): 630 x 840 logical pixels, scaled down by whole steps that keep 3:4 when the monitor work
 area is smaller, not resizable (no sizing border, no size hook, no maximize), minimize and close from the page's
 title bar, DWM rounded corners, DWM border colour set to the page background (`DWMWA_BORDER_COLOR`) so no light
 frame line shows at the top. The page covers the whole client area (no resize strip). Single instance by a named
