@@ -159,9 +159,11 @@ export function createMock({ params, dispatch }) {
     sound_when_done: true,
     auto_download_updates: true,
     theme: 'nova',
+    ui_scale: 100,
     defaults: clone(DEFAULTS),
   };
   const THEMES = ['dusk', 'nova', 'frost', 'bloom'];
+  const SCALES = [100, 125, 150, 175, 200];
   let settings = loadSettings();
 
   function loadSettings() {
@@ -175,6 +177,7 @@ export function createMock({ params, dispatch }) {
       Object.entries(saved).filter(([k]) => k in BASE_SETTINGS)) : {};  // keys of older mock versions are dropped
     const s = { ...clone(BASE_SETTINGS), ...known };
     if (!THEMES.includes(s.theme)) s.theme = BASE_SETTINGS.theme;
+    if (!SCALES.includes(s.ui_scale)) s.ui_scale = BASE_SETTINGS.ui_scale;
     s.defaults = {
       video: normalize('video', DEFAULTS.video, s.defaults && s.defaults.video),
       image: normalize('image', DEFAULTS.image, s.defaults && s.defaults.image),
@@ -222,6 +225,9 @@ export function createMock({ params, dispatch }) {
           break;
         case 'theme':
           next.theme = THEMES.includes(v) ? v : BASE_SETTINGS.theme;
+          break;
+        case 'ui_scale':
+          next.ui_scale = SCALES.includes(Number(v)) ? Number(v) : BASE_SETTINGS.ui_scale;
           break;
         case 'defaults':
           if (v && typeof v === 'object') {
@@ -1038,6 +1044,14 @@ export function createMock({ params, dispatch }) {
       return clone(caps);
     },
 
+    async set_scale(value) {
+      // The shell zooms the window; the browser mock only stores the step.
+      await sleep(60);
+      settings = applySettingsPatch({ ui_scale: value });
+      saveSettings();
+      emit('settings', clone(settings));
+      return clone(settings);
+    },
     async window_minimize() {
       console.info('[mock] window_minimize');
       return null;

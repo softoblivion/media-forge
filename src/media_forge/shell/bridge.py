@@ -374,6 +374,7 @@ class Bridge:
         self._focused = True
         self._last_dir = ""
         self._auto_download_for: Optional[str] = None
+        self._scale_applier: Optional[Callable[[int], None]] = None
         self._shut_down = False
 
     # -- wiring (underscore names are not exposed to JS)
@@ -386,6 +387,10 @@ class Bridge:
         """The updater and its periodic scheduler; the scheduler starts after the launch check."""
         self._updater = updater
         self._scheduler = scheduler
+
+    def _attach_scale(self, applier: Callable[[int], None]) -> None:
+        """The shell's function that applies a Scale percentage to the window (zoom factor and window size)."""
+        self._scale_applier = applier
 
     def _emit(self, name: str, payload: Any) -> None:
         if name == "batch_done":
@@ -664,6 +669,17 @@ class Bridge:
         return after
 
     @_api
+    def set_scale(self, value):
+        """The Scale setting (BRIDGE_API 3.5 `ui_scale`): saves the step and applies it to the window at once."""
+        after = self.set_settings({"ui_scale": value})
+        if self._scale_applier is not None:
+            try:
+                self._scale_applier(int(after.get("ui_scale", 100)))
+            except Exception:  # noqa: BLE001 - the setting is saved; the window keeps its size
+                log.exception("scale could not be applied")
+        return after
+
+    @_api
     def pick_output_dir(self):
         window = self._need_window()
         current = str(self._setting("output_dir", "") or "")
@@ -754,5 +770,5 @@ CONTRACT_METHODS = (
     "ready", "add_files", "pick_files", "remove_item", "clear", "set_item_settings", "apply_to_kind", "start",
     "start_now", "cancel", "cancel_all", "get_settings", "set_settings", "pick_output_dir", "reveal", "open_path",
     "open_url", "capabilities", "window_minimize", "window_close", "update_status", "check_updates",
-    "download_update", "apply_update", "log",
+    "download_update", "apply_update", "log", "set_scale",
 )

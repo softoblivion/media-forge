@@ -24,9 +24,9 @@ from media_forge.core.selfupdate import APPLY_FLAG, build_scheduler, build_updat
 WINDOW_TITLE = "Media Forge"
 MUTEX_NAME = "Local\\MediaForge.SingleInstance"
 BACKGROUND = "#04070f"
-# Window = page viewport, logical pixels, 3:4, not resizable (ARCHITECTURE.md 7). The first size that fits the
-# monitor work area is used.
-SIZE_LADDER = ((630, 840), (600, 800), (570, 760), (540, 720))
+# Window = page viewport, logical pixels, 3:4, not resizable (ARCHITECTURE.md 7). The first size whose size times
+# the Scale setting fits the monitor work area is used; the two smallest steps exist for the larger scales.
+SIZE_LADDER = ((630, 840), (600, 800), (570, 760), (540, 720), (510, 680), (480, 640))
 START_SIZE = SIZE_LADDER[0]
 HTTP_PORT_FIRST = 42101  # fixed port range keeps the page origin (and its localStorage) stable between launches
 HTTP_PORT_TRIES = 40
@@ -292,9 +292,33 @@ def _on_ui_thread(window: Any, fn) -> None:
     fn()
 
 
+class WindowScale:
+    """The Scale setting applied to the window: the WebView2 zoom factor plus the locked window size (logical
+    size times the factor; the page keeps its logical layout). `apply` runs on the UI thread."""
+
+    def __init__(self, window: Any, hook: Any, ladder) -> None:
+        self._window = window
+        self._hook = hook
+        self._ladder = ladder
+        self.percent = 100
+
+    def apply(self, percent: int, keep_position: bool = False) -> None:
+        from . import winutil
+
+        zoom = max(1, int(percent)) / 100.0
+        self.percent = int(percent)
+        winutil.set_zoom_factor(self._window, zoom)
+        width, height = self._hook.fit_size(self._ladder, zoom)
+        rect = self._hook.lock(width, height, apply=self._window.native.SetBounds, zoom=zoom,
+                               keep_position=keep_position)
+        log.info("window %sx%s logical at %s%%, %sx%s physical, dpi scale %.2f", width, height, self.percent,
+                 rect[2], rect[3], winutil.window_scale(self._hook.hwnd))
+
+
 def _setup_native_window(window: Any, bridge: Any) -> None:
-    """On the UI thread after the form is shown: fixed size fitted to the work area, no maximize, DWM corners and
-    border colour, focus tracking."""
+    """On the UI thread after the form is shown: fixed size fitted to the work area at the saved Scale, no
+    maximize, DWM corners and border colour, focus tracking. The zoom is set before the page shows anything (the
+    page waits for the bridge)."""
     from . import winutil
 
     native = window.native
@@ -307,10 +331,13 @@ def _setup_native_window(window: Any, bridge: Any) -> None:
         hook = winutil.FixedSizeHook(hwnd)
         if hook.install():
             _keep_alive.append(hook)  # the ctypes callback must outlive the window
-            width, height = hook.fit_size(SIZE_LADDER)
-            rect = hook.lock(width, height, apply=native.SetBounds)
-            log.info("window %sx%s logical, %sx%s physical, scale %.2f", width, height, rect[2], rect[3],
-                     winutil.window_scale(hwnd))
+            scale = WindowScale(window, hook, SIZE_LADDER)
+            try:
+                percent = int((bridge._engine.get_settings() or {}).get("ui_scale", 100))
+            except Exception:  # noqa: BLE001
+                percent = 100
+            scale.apply(percent)
+            bridge._attach_scale(lambda value: _on_ui_thread(window, lambda: scale.apply(value, keep_position=True)))
         else:
             log.warning("fixed-size hook was not installed")
     except Exception:  # noqa: BLE001

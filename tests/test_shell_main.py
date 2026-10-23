@@ -21,7 +21,7 @@ class MainHelpersTest(unittest.TestCase):
         self.assertEqual(main.MUTEX_NAME, "Local\\MediaForge.SingleInstance")
         self.assertEqual(main.BACKGROUND, "#04070f")
         self.assertEqual(main.START_SIZE, (630, 840))
-        self.assertEqual(main.SIZE_LADDER[-1], (540, 720))
+        self.assertEqual(main.SIZE_LADDER[-1], (480, 640))   # the smallest step, used at 150 % and above
         self.assertFalse(hasattr(main, "MIN_SIZE") or hasattr(main, "TOP_GRIP"))
         self.assertEqual(main.HTTP_PORT_FIRST, 42101)
 

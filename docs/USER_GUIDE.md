@@ -30,6 +30,7 @@ The gear in the title bar opens the settings sheet.
 | Setting | Meaning |
 |---|---|
 | **Theme** | Dusk, Nova (default), Frost or Bloom: the background colour family and the accent of the window. |
+| **Scale** | 100 (default), 125, 150, 175 or 200 %: the size of the whole window and its text, on top of the Windows display scaling. The window grows with the step; on a small screen it keeps a layout step that still fits. |
 | **Output** | Next to the source (`<name>_forge.<ext>`) or one folder of your choice. |
 | **Suffix** | The part added to the file name, `_forge` by default; may be empty when outputs go to a folder. |
 | **Parallel jobs** | 1 to 3 files at a time. |

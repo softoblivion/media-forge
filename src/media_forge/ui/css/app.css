@@ -1,10 +1,11 @@
 /* Media Forge screen: list and cards, settings panels, footer, empty state, drop veil, status
-   banner, scroll edges, size limit field, settings sheet content. Designed for 540-720 px wide
+   banner, scroll edges, size limit field, settings sheet content. Designed for 480-720 px wide
    windows (3:4). The material, the buttons (including the hero Start pill), the controls, the
-   overlays, the toasts, the title bar, the theme row and the scene come from the Liquid UI kit
-   (vendor/liquid_ui/css); every colour here is a kit token (the four themes retint it) or one of
-   the app's kind colours; every interface transition uses the kit's durations --d-1..--d-4 and
-   easings. docs/UI_DESIGN.md, section 1. */
+   overlays, the toasts, the title bar, the theme row, the scale row and the scene come from the
+   Liquid UI kit (vendor/liquid_ui/css); every colour here is a kit token (the four themes retint
+   it) or one of the app's kind colours; every text is a role of the kit's type scale; every
+   interface transition uses the kit's durations --d-1..--d-4 and easings. docs/UI_DESIGN.md,
+   section 1. */
 
 /* App tokens on top of the kit's tokens.css (the identity tokens come from the themes). */
 :root {
@@ -14,14 +15,14 @@
   --k-audio: #bb9cff;
 
   /* Footer height (also the hero pill's height) */
-  --foot-h: 56px;
+  --foot-h: 48px;
 }
 
 #app {
   position: fixed;
   inset: 0;
   z-index: 1;
-  --card-gap: 10px;
+  --card-gap: 8px;
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -88,14 +89,15 @@ html.has-items .edge-bottom { opacity: 1; }
   align-items: center;
   gap: 10px;
   margin-bottom: var(--card-gap);
-  padding: 10px 14px;
-  border-radius: 16px;
-  font: var(--t-callout);
+  padding: 9px 12px;
+  border-radius: var(--r-14);
+  font: var(--t-body);
+  letter-spacing: var(--tr-body);
   color: var(--ink-2);
   --lite-tint: rgba(255, 196, 87, 0.07);
 }
 
-.caps-banner .spinner { width: 16px; height: 16px; flex: none; }
+.caps-banner .spinner { width: 15px; height: 15px; flex: none; }
 .caps-banner .ic { color: var(--rose-ink); }
 .caps-banner[data-kind="bad"] { --lite-tint: rgba(255, 100, 130, 0.1); color: var(--rose-ink); }
 
@@ -110,12 +112,12 @@ html.has-items .edge-bottom { opacity: 1; }
 
 .card {
   margin-bottom: var(--card-gap);
-  border-radius: var(--r-22);
+  border-radius: var(--r-18);
   --lite-tint: rgba(255, 255, 255, 0.045);
   --k: var(--k-video);
   transition: background-color var(--d-3) ease, box-shadow var(--d-3) ease;
   content-visibility: auto;
-  contain-intrinsic-size: auto 84px;
+  contain-intrinsic-size: auto 78px;
   outline-offset: 3px;
 }
 
@@ -133,18 +135,18 @@ html.has-items .edge-bottom { opacity: 1; }
 
 .card-head {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
+  grid-template-columns: 60px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 11px 9px 11px 11px;
+  gap: 11px;
+  padding: 10px 8px 10px 10px;
   cursor: pointer;
 }
 
 .card-thumb {
   position: relative;
-  width: 64px;
-  height: 48px;
-  border-radius: 12px;
+  width: 60px;
+  height: 45px;
+  border-radius: var(--r-10);
   overflow: hidden;
   background: rgba(0, 0, 0, 0.3);
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -159,7 +161,7 @@ html.has-items .edge-bottom { opacity: 1; }
 }
 
 .thumb-ph { color: color-mix(in srgb, var(--k) 70%, transparent); }
-.thumb-ph .ic { width: 22px; height: 22px; }
+.thumb-ph .ic { width: 20px; height: 20px; }
 
 .card[data-status="probing"] .card-thumb::after {
   content: '';
@@ -184,17 +186,17 @@ html.has-items .edge-bottom { opacity: 1; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: var(--t-card);
-  letter-spacing: var(--tr-card);
+  font: var(--t-label);
+  letter-spacing: var(--tr-label);
   text-shadow: var(--ink-shadow);
 }
 
 .kind-chip {
   flex: none;
-  padding: 0 7px;
-  border-radius: 6px;
-  font: var(--t-micro);
-  letter-spacing: 0.05em;
+  padding: 0 6px;
+  border-radius: 5px;
+  font: var(--t-section);
+  letter-spacing: var(--tr-section);
   text-transform: uppercase;
   background: color-mix(in srgb, var(--k) 16%, transparent);
   color: color-mix(in srgb, var(--k) 88%, white);
@@ -203,7 +205,8 @@ html.has-items .edge-bottom { opacity: 1; }
 .card-meta {
   margin-top: 2px;
   min-height: 16px;
-  font: var(--t-meta);
+  font: var(--t-caption);
+  letter-spacing: var(--tr-caption);
   font-variant-numeric: tabular-nums;
   color: var(--ink-3);
   overflow: hidden;
@@ -215,9 +218,10 @@ html.has-items .edge-bottom { opacity: 1; }
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 26px;
+  min-height: 24px;
   margin-top: 4px;
-  font: var(--t-meta);
+  font: var(--t-caption);
+  letter-spacing: var(--tr-caption);
   color: var(--ink-3);
   min-width: 0;
 }
@@ -252,7 +256,7 @@ html.has-items .edge-bottom { opacity: 1; }
 .st-wait { color: var(--ink-2); }
 .st-run { color: var(--ink-1); }
 .st-stage { font-weight: var(--w-medium); color: var(--ink-1); }
-.st-pct { font: var(--w-strong) 12px / 1 var(--font-text); font-variant-numeric: tabular-nums; color: var(--accent-ink); }
+.st-pct { font: var(--t-caption); font-weight: var(--w-strong); font-variant-numeric: tabular-nums; color: var(--accent-ink); }
 .st-speed { margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink-3); }
 .st-x { margin-right: -2px; }
 .st-btn { margin-left: auto; flex: none; }
@@ -378,10 +382,11 @@ html.has-items .edge-bottom { opacity: 1; }
 
 .p-note {
   margin-bottom: 12px;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: 8px 11px;
+  border-radius: var(--r-10);
   background: var(--fill-1);
-  font: var(--t-meta);
+  font: var(--t-caption);
+  letter-spacing: var(--tr-caption);
   color: var(--ink-2);
 }
 
@@ -404,16 +409,18 @@ html.has-items .edge-bottom { opacity: 1; }
   justify-content: space-between;
   align-items: baseline;
   padding: 0 2px;
-  font: var(--t-caption);
-  letter-spacing: 0.01em;
+  font: var(--t-section);
+  letter-spacing: var(--tr-section);
+  text-transform: uppercase;
   color: var(--ink-3);
 }
 
-.p-aside { color: var(--ink-4); }
+.p-aside { color: var(--ink-4); text-transform: none; letter-spacing: var(--tr-caption); font: var(--t-caption); }
 
 .p-hint {
   padding: 0 2px;
-  font: var(--t-meta);
+  font: var(--t-caption);
+  letter-spacing: var(--tr-caption);
   color: var(--ink-4);
 }
 
@@ -426,7 +433,7 @@ html.has-items .edge-bottom { opacity: 1; }
 }
 
 .p-switches {
-  border-radius: 16px;
+  border-radius: var(--r-14);
   background: var(--fill-1);
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.05);
 }
@@ -436,13 +443,13 @@ html.has-items .edge-bottom { opacity: 1; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 12px 9px 14px;
+  padding: 8px 11px 8px 12px;
 }
 
 .p-switch + .p-switch { border-top: 1px solid rgba(255, 255, 255, 0.05); }
 .p-sw-label { min-width: 0; }
-.p-sw-label span { display: block; font: var(--t-callout); font-weight: var(--w-medium); color: var(--ink-1); }
-.p-sw-label small { display: block; font: var(--t-meta); color: var(--ink-3); }
+.p-sw-label span { display: block; font: var(--t-label); letter-spacing: var(--tr-label); color: var(--ink-1); }
+.p-sw-label small { display: block; font: var(--t-caption); letter-spacing: var(--tr-caption); color: var(--ink-3); }
 
 /* ---------------------------------------------------------------------------------------------
    Footer: counters capsule + the hero Start pill (the kit's .hero; js/footer.js sets its state
@@ -453,10 +460,10 @@ html.has-items .edge-bottom { opacity: 1; }
   z-index: 25;
   left: var(--gutter);
   right: var(--gutter);
-  bottom: 14px;
+  bottom: 12px;
   height: var(--foot-h);
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .foot-stats {
@@ -482,7 +489,7 @@ html.has-items .edge-bottom { opacity: 1; }
   padding-left: 2px;
 }
 
-.foot-count { font: var(--t-card); letter-spacing: var(--tr-card); white-space: nowrap; }
+.foot-count { font: var(--t-label); letter-spacing: var(--tr-label); white-space: nowrap; }
 
 .foot-sub {
   display: flex;
@@ -490,7 +497,8 @@ html.has-items .edge-bottom { opacity: 1; }
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  font: var(--t-meta);
+  font: var(--t-caption);
+  letter-spacing: var(--tr-caption);
   font-variant-numeric: tabular-nums;
   color: var(--ink-3);
   text-shadow: none;
@@ -509,7 +517,7 @@ html.has-items .edge-bottom { opacity: 1; }
 /* The Start pill: the kit's hero at the footer height; the width is set by js/footer.js. */
 #btn-start {
   --hero-h: var(--foot-h);
-  width: 160px;
+  width: 150px;
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -527,9 +535,9 @@ html.has-items .edge-bottom { opacity: 1; }
 }
 
 .empty-card {
-  width: min(470px, 100%);
-  padding: 34px 28px 26px;
-  border-radius: var(--r-34);
+  width: min(450px, 100%);
+  padding: 30px 26px 24px;
+  border-radius: var(--r-28);
   text-align: center;
   --lens-tint: var(--tint-regular);
   --lens-shadow: var(--shadow-l);
@@ -657,17 +665,18 @@ html.has-items .edge-bottom { opacity: 1; }
 }
 
 .empty-sub {
-  margin: 8px 0 22px;
+  margin: 8px 0 20px;
   max-width: 340px;
-  font: var(--t-callout);
-  letter-spacing: var(--tr-callout);
+  font: var(--t-body);
+  letter-spacing: var(--tr-body);
   color: var(--ink-2);
   text-wrap: balance;
 }
 
 .empty-keys {
-  margin-top: 14px;
-  font: var(--t-meta);
+  margin-top: 12px;
+  font: var(--t-caption);
+  letter-spacing: var(--tr-caption);
   color: var(--ink-3);
 }
 
@@ -679,7 +688,7 @@ html.has-items .edge-bottom { opacity: 1; }
   border-top: 1px solid rgba(255, 255, 255, 0.07);
   max-width: 360px;
   font: var(--t-caption);
-  letter-spacing: 0.01em;
+  letter-spacing: var(--tr-caption);
   color: var(--ink-4);
   text-wrap: balance;
 }
@@ -742,7 +751,7 @@ html.has-items .edge-bottom { opacity: 1; }
 
 .veil-ic .ic { width: 30px; height: 30px; color: #fff; }
 .veil-inner b { font: var(--t-title); letter-spacing: var(--tr-title); }
-.veil-inner span:last-child { font: var(--t-callout); color: var(--ink-2); max-width: 300px; }
+.veil-inner span:last-child { font: var(--t-body); letter-spacing: var(--tr-body); color: var(--ink-2); max-width: 300px; }
 
 .veil.is-dropped .veil-ic { animation: veil-drop 0.45s var(--ease-spring); }
 
@@ -771,9 +780,9 @@ html.has-items .edge-bottom { opacity: 1; }
    Narrow windows (540-600 px) */
 
 @media (max-width: 600px) {
-  .card-head { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; }
-  .card-thumb { width: 56px; height: 44px; border-radius: 11px; }
-  #btn-start { min-width: 140px; }
+  .card-head { grid-template-columns: 54px minmax(0, 1fr) auto; gap: 9px; }
+  .card-thumb { width: 54px; height: 41px; border-radius: var(--r-8); }
+  #btn-start { min-width: 136px; }
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -782,11 +791,11 @@ html.has-items .edge-bottom { opacity: 1; }
 .lim {
   display: inline-flex;
   align-items: center;
-  height: 34px;
-  width: 200px;
+  height: var(--h-m);
+  width: 196px;
   max-width: 100%;
-  padding: 0 4px 0 12px;
-  border-radius: 12px;
+  padding: 0 4px 0 11px;
+  border-radius: var(--r-10);
   background: var(--well);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.32), inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
   transition: box-shadow var(--d-1) ease;
@@ -801,7 +810,9 @@ html.has-items .edge-bottom { opacity: 1; }
   border: 0;
   padding: 0;
   background: transparent;
-  font: var(--w-medium) 13.5px / 1 var(--font-text);
+  font: var(--t-body);
+  font-weight: var(--w-medium);
+  line-height: 1;
   color: var(--ink-1);
   outline: none;
   user-select: text;
@@ -812,17 +823,18 @@ html.has-items .edge-bottom { opacity: 1; }
 .lim-unit {
   margin: 0 6px 0 4px;
   font: var(--t-caption);
+  letter-spacing: var(--tr-caption);
   color: var(--ink-3);
 }
 
 .lim-clear {
-  width: 26px;
-  height: 26px;
+  width: var(--h-xs);
+  height: var(--h-xs);
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r-8);
   background: transparent;
   color: var(--ink-3);
   cursor: pointer;
@@ -848,8 +860,8 @@ html.has-items .edge-bottom { opacity: 1; }
 .path-text {
   flex: 1;
   min-width: 0;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: 7px 11px;
+  border-radius: var(--r-10);
   background: var(--well);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   font: var(--t-mono);
@@ -865,17 +877,17 @@ html.has-items .edge-bottom { opacity: 1; }
 
 .set-panel { border-top: 1px solid rgba(255, 255, 255, 0.06); }
 .set-panel { padding: 4px 0 6px; }
-.set-panel .panel { padding: 8px 16px 6px; }
+.set-panel .panel { padding: 8px 14px 6px; }
 
 .eng-rows { padding: 4px 0; }
 
 .eng-row {
   display: grid;
-  grid-template-columns: 10px 104px minmax(0, 1fr) auto;
+  grid-template-columns: 10px 100px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  min-height: 40px;
-  padding: 6px 16px;
+  min-height: 36px;
+  padding: 5px 14px;
 }
 
 .eng-row + .eng-row { border-top: 1px solid rgba(255, 255, 255, 0.05); }
@@ -883,13 +895,14 @@ html.has-items .edge-bottom { opacity: 1; }
 .eng-row.is-ok .eng-dot { background: var(--mint); box-shadow: 0 0 8px rgba(63, 226, 193, 0.7); }
 .eng-row.is-busy .eng-dot { background: var(--amber); animation: ver-pulse 1.4s ease-in-out infinite; }
 .eng-row.is-bad .eng-dot { background: var(--rose); }
-.eng-name { font: var(--t-card); font-size: 13px; font-weight: var(--w-medium); }
+.eng-name { font: var(--t-label); letter-spacing: var(--tr-label); }
 .eng-val { font: var(--t-mono-s); --ff-feat: var(--ff-mono); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
-.eng-st { font: var(--t-meta); color: var(--ink-3); text-align: right; }
+.eng-st { font: var(--t-caption); letter-spacing: var(--tr-caption); color: var(--ink-3); text-align: right; }
 
 .set-about {
-  margin: 18px 12px 0;
+  margin: 16px 12px 0;
   font: var(--t-caption);
+  letter-spacing: var(--tr-caption);
   color: var(--ink-4);
   text-align: center;
 }

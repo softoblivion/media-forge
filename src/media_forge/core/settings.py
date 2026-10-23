@@ -24,6 +24,8 @@ log = logging.getLogger("media_forge.core.settings")
 SCHEMA_VERSION = 1
 OUTPUT_MODES = ("beside", "folder")
 THEMES = ("dusk", "nova", "frost", "bloom")  # the kit's four themes (BRIDGE_API.md 3.5)
+SCALE_STEPS = (100, 125, 150, 175, 200)      # the kit's Scale setting (BRIDGE_API.md 3.5 `ui_scale`)
+DEFAULT_SCALE = 100
 SUFFIX_MAX = 24
 _SUFFIX_BAD = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -41,7 +43,22 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "sound_when_done": True,
     "auto_download_updates": True,
     "theme": "nova",
+    "ui_scale": DEFAULT_SCALE,
 }
+
+
+def normalize_scale(value: Any) -> int:
+    """The nearest step of SCALE_STEPS for a number or a numeric string (the larger step on a tie); the default
+    for anything else."""
+    if isinstance(value, bool):
+        return DEFAULT_SCALE
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_SCALE
+    if number != number or number <= 0:
+        return DEFAULT_SCALE
+    return min(SCALE_STEPS, key=lambda step: (abs(step - number), -step))
 
 
 def default_settings() -> dict[str, Any]:
@@ -90,6 +107,8 @@ def validate(current: Mapping[str, Any], patch: Mapping[str, Any],
             new[key] = catalog._int_clamp(value, 1, 3, GLOBAL_DEFAULTS[key])
         elif key == "theme":
             new[key] = value if value in THEMES else GLOBAL_DEFAULTS[key]
+        elif key == "ui_scale":
+            new[key] = normalize_scale(value)
         else:  # booleans
             new[key] = value if isinstance(value, bool) else bool(current.get(key, GLOBAL_DEFAULTS[key]))
     if new["output_mode"] == "folder" and check_folder and ("output_mode" in patch or "output_dir" in patch):

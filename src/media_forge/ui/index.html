@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="vendor/liquid_ui/css/scene.css">
   <link rel="stylesheet" href="vendor/liquid_ui/css/glass.css">
   <link rel="stylesheet" href="vendor/liquid_ui/css/components.css">
+  <link rel="stylesheet" href="vendor/liquid_ui/css/titlebar.css">
   <!-- Media Forge screen. -->
   <link rel="stylesheet" href="css/app.css">
   <script type="module" src="js/main.js"></script>
@@ -48,21 +49,8 @@
     <div class="edge edge-top" aria-hidden="true"></div>
     <div class="edge edge-bottom" aria-hidden="true"></div>
 
-    <header id="titlebar" class="titlebar">
-      <div class="tb-drag pywebview-drag-region"></div>
-      <div class="tb-brand pywebview-drag-region">
-        <span id="tb-glyph" class="tb-glyph pywebview-drag-region"></span>
-        <span class="tb-name pywebview-drag-region">Media Forge</span>
-      </div>
-      <button type="button" id="ver-pill" class="ver-pill" aria-haspopup="dialog"><span class="ver-dot" aria-hidden="true"></span><span class="ver-text"></span></button>
-      <div class="tb-space pywebview-drag-region"></div>
-      <div id="tb-cluster" class="tb-cluster">
-        <button type="button" id="btn-settings" class="tb-btn tb-gear" aria-label="Settings" title="Settings" aria-haspopup="dialog"></button>
-        <span class="tb-sep" aria-hidden="true"></span>
-        <button type="button" id="win-min" class="tb-btn" aria-label="Minimize" title="Minimize"></button>
-        <button type="button" id="win-close" class="tb-btn tb-close" aria-label="Close" title="Close"></button>
-      </div>
-    </header>
+    <!-- The kit's title bar (js/main.js mountTitlebar): glyph, name and version pill; settings | minimize, close. -->
+    <header id="titlebar"></header>
 
     <footer id="foot" class="foot" hidden>
       <div id="foot-stats" class="foot-stats"></div>

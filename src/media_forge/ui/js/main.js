@@ -11,8 +11,9 @@ import { icon, appGlyph } from './icons.js';
 import { initToasts, toast } from '../vendor/liquid_ui/js/toast.js';
 import { initList, addItems, removeItem, focusedCardId, collapseExpanded, getItems } from './list.js';
 import { initFooter, pickFiles, start, footerMenuOpen } from './footer.js';
-import { initSettings } from './settings.js';
+import { initSettings, toggleSettings } from './settings.js';
 import { mountUpdateControl } from '../vendor/liquid_ui/js/update.js';
+import { mountTitlebar } from '../vendor/liquid_ui/js/titlebar.js';
 import { initDropzone } from './dropzone.js';
 import { initSound } from './sound.js';
 
@@ -61,18 +62,19 @@ function initUpdate(state) {
   return ctl;
 }
 
+let titlebar = null;
+
+/** The kit's title bar: glyph, name and version pill on the left, settings | minimize, close on the right. */
 function initTitlebar() {
-  document.getElementById('tb-glyph').innerHTML = appGlyph(22);
-  const cluster = document.getElementById('tb-cluster');
-  new Lens(cluster, 'capsule');
-  document.getElementById('btn-settings').innerHTML = icon('gear');
-  document.getElementById('win-min').innerHTML = icon('min');
-  document.getElementById('win-close').innerHTML = icon('close');
-  for (const b of cluster.querySelectorAll('button')) gel(b, { amount: 0.7 });
-  const win = { 'win-min': 'window_minimize', 'win-close': 'window_close' };
-  for (const [id, method] of Object.entries(win)) {
-    document.getElementById(id).addEventListener('click', () => call(method).catch((err) => toast('error', err.message)));
-  }
+  const win = (method) => () => call(method).catch((err) => toast('error', err.message));
+  titlebar = mountTitlebar(document.getElementById('titlebar'), {
+    name: 'Media Forge',
+    glyph: appGlyph(20),
+    onSettings: () => toggleSettings(),
+    onMinimize: win('window_minimize'),
+    onClose: win('window_close'),
+  });
+  titlebar.gear.id = 'btn-settings';
 }
 
 function initEmpty() {
@@ -168,9 +170,9 @@ function initKeys() {
 function entrance() {
   if (reducedMotion.matches) return;
   const parts = [
-    [document.querySelector('.tb-brand'), 0],
-    [document.getElementById('ver-pill'), 50],
-    [document.getElementById('tb-cluster'), 90],
+    [titlebar.left, 0],
+    [titlebar.pill, 50],
+    [titlebar.cluster, 90],
   ];
   for (const [el, delay] of parts) {
     if (!el) continue;

@@ -104,6 +104,21 @@ class SettingsTest(ScratchCase):
         raw = json.loads(s.paths.settings_file.read_text(encoding="utf-8"))
         self.assertNotIn("update_check_interval", raw)
 
+    def test_ui_scale(self):
+        s = self.fresh("scale")
+        self.assertEqual(s.load()["ui_scale"], 100)
+        self.assertEqual(s.patch({"ui_scale": 150})["ui_scale"], 150)
+        self.assertEqual(Settings(s.paths).load()["ui_scale"], 150)
+        self.assertEqual(s.patch({"ui_scale": "175"})["ui_scale"], 175)
+        self.assertEqual(s.patch({"ui_scale": 140})["ui_scale"], 150)   # nearest step
+        self.assertEqual(s.patch({"ui_scale": 112.5})["ui_scale"], 125)  # the larger step on a tie
+        self.assertEqual(s.patch({"ui_scale": 900})["ui_scale"], 200)
+        for junk in ("big", None, True, -5, 0):
+            with self.subTest(junk=junk):
+                self.assertEqual(s.patch({"ui_scale": junk})["ui_scale"], 100)
+        s.paths.settings_file.write_text(json.dumps({"ui_scale": 160}), encoding="utf-8")
+        self.assertEqual(s.load()["ui_scale"], 150)
+
     def test_theme(self):
         s = self.fresh("theme")
         self.assertEqual(s.load()["theme"], "nova")

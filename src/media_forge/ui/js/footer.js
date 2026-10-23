@@ -174,7 +174,7 @@ function setStartState(state, c, items, ffReady) {
   fitWidth(state, label);
 }
 
-/** Spring the pill width to its content (min 148 px, max 42 % of the footer). */
+/** Spring the pill width to its content (min 140 px, 168 while running, max 46 % of the footer). */
 function fitWidth(state, label) {
   const key = `${state}|${state === 'ready' || state === 'empty' ? label : ''}`;
   if (startBtn.__wkey === key) return;
@@ -185,7 +185,7 @@ function fitWidth(state, label) {
   startBtn.appendChild(meas);
   const content = meas.scrollWidth;
   meas.remove();
-  const target = Math.round(Math.max(state === 'progress' ? 176 : 148, Math.min(content + 8, foot.clientWidth * 0.46)));
+  const target = Math.round(Math.max(state === 'progress' ? 168 : 140, Math.min(content + 8, foot.clientWidth * 0.46)));
   if (!widthSpring) {
     widthSpring = new Spring(target, SPRINGS.bouncy, (v) => (startBtn.style.width = `${v.toFixed(1)}px`));
     widthSpring.set(target);
