@@ -169,7 +169,7 @@ def expand_paths(paths: Iterable[str]) -> list[str]:
 
 
 def dropped_paths(event: Any) -> list[str]:
-    """`pywebviewFullPath` of every file in a pywebview DOM drop event (NOTES.md, "Dropped files have no path")."""
+    """`pywebviewFullPath` of every file in a pywebview DOM drop event; the page itself sees no path for a dropped file."""
     files = ((event or {}).get("dataTransfer") or {}).get("files") or []
     paths = []
     for item in files:
