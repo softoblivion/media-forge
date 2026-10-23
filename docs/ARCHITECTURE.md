@@ -198,3 +198,12 @@ area is smaller, not resizable (no sizing border, no size hook, no maximize), mi
 title bar, DWM rounded corners, DWM border colour set to the page background (`DWMWA_BORDER_COLOR`) so no light
 frame line shows at the top. The page covers the whole client area (no resize strip). Single instance by a named
 mutex; a second launch brings the window to the front.
+
+Scale (`Settings.ui_scale`, 100 / 125 / 150 / 175 / 200 %): the shell sets the WebView2 zoom factor of the window's
+control to `ui_scale / 100` and locks the window at the logical size times that factor (times the monitor's DPI
+scale), so the page keeps its logical layout and text stays crisp. The ladder step is chosen for the scaled size:
+630 x 840, 600 x 800, 570 x 760, 540 x 720, 510 x 680, 480 x 640 (the two smallest exist for 150 % and above; at
+150 % on a 1920 x 1080 work area the window is 510 x 680 logical, 765 x 1020 physical); when even the smallest
+step does not fit, it is used anyway. The saved value is applied in `WindowScale.apply` on the window's `shown`
+event, before the page shows anything; `set_scale` applies a change at once and keeps the window's top-left corner
+inside the work area.

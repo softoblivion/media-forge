@@ -35,6 +35,7 @@ in `js/mock.js`) all code against it. A change here is a change for the core, th
 | `cancel_all()` | | `number` | items cancelled |
 | `get_settings()` | | `Settings` | |
 | `set_settings(patch)` | `object` | `Settings` | partial global settings (3.5), validated; `defaults.<kind>` patches are normalised like item settings, `theme` like an enum (unknown -> default) |
+| `set_scale(value)` | `100 \| 125 \| 150 \| 175 \| 200` | `Settings` | the Scale setting: saves `ui_scale` (an unknown value snaps to the nearest step), sets the WebView2 zoom factor and resizes the window to the logical size times the factor at once, keeping its top-left corner inside the work area; `settings` follows |
 | `pick_output_dir()` | | `string \| null` | native folder dialog; the caller then calls `set_settings` |
 | `reveal(path)` | `string` | `boolean` | Explorer with the file selected |
 | `open_path(path)` | `string` | `boolean` | opens a file or folder with the shell default |
@@ -169,6 +170,7 @@ without NVENC support -> `auto`; `upscale_method` other than `lanczos` with `sca
   "sound_when_done": true,
   "auto_download_updates": true,
   "theme": "nova",
+  "ui_scale": 100,
   "defaults": { "video": { ...VideoSettings }, "image": { ...ImageSettings }, "audio": { ...AudioSettings } }
 }
 ```
@@ -189,6 +191,10 @@ without NVENC support -> `auto`; `upscale_method` other than `lanczos` with `sca
   unknown value in a patch or in the file is replaced by the default (never refused). The page applies the
   confirmed value (`applyTheme` of the kit) and mirrors it in `localStorage` so the next launch paints the right
   theme before `ready()` returns; the shell only stores it.
+- `ui_scale`: `100` | `125` | `150` | `175` | `200`, default `100`: the Scale setting, percent of the whole window
+  on top of Windows' own display scaling. An unknown value in a patch or in the file snaps to the nearest step
+  (never refused). The shell applies it (ARCHITECTURE 7): the WebView2 zoom factor and the window size, before
+  the page is shown at start and at once through `set_scale`; the page only renders the row.
 
 ### 3.6 Capabilities
 

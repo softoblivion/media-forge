@@ -12,6 +12,7 @@ import { Overlay } from '../vendor/liquid_ui/js/overlay.js';
 import { gel } from '../vendor/liquid_ui/js/glass.js';
 import { Segmented, Switch, Stepper } from '../vendor/liquid_ui/js/controls.js';
 import { applyTheme, mountThemeControl } from '../vendor/liquid_ui/js/theme.js';
+import { mountScaleControl } from '../vendor/liquid_ui/js/scale.js';
 import { SettingsPanel } from './panels.js';
 import { icon } from './icons.js';
 import { escapeHtml, KIND_LABEL } from './format.js';
@@ -31,8 +32,6 @@ export function initSettings(state, updateControl) {
   sheet = document.getElementById('settings-sheet');
   content = sheet.querySelector('.ov-content');
   overlay = new Overlay(sheet, { modal: true, preset: 'sheet', onClose: teardown });
-  const gear = document.getElementById('btn-settings');
-  gear.addEventListener('click', () => (overlay.open ? overlay.close() : openSettings()));
   on('settings', (s) => {
     if (!s) return;
     store.settings = s;
@@ -44,6 +43,12 @@ export function initSettings(state, updateControl) {
 
 export function settingsOpen() {
   return overlay && overlay.open;
+}
+
+/** The gear of the title bar: open the sheet, or close it when it is open. */
+export function toggleSettings() {
+  if (overlay.open) overlay.close();
+  else openSettings();
 }
 
 export async function openSettings() {
@@ -161,6 +166,26 @@ function build() {
         ctl.theme.set(store.settings.theme);
         applyTheme(store.settings.theme);
       });
+    },
+  });
+
+  // Scale: the shell applies the step to the window at once (set_scale) and saves it as ui_scale.
+  ctl.ui_scale = mountScaleControl(content.querySelector('.set-appearance .set-card'), {
+    value: s.ui_scale,
+    onChange: async (v) => {
+      inflight.set('ui_scale', (inflight.get('ui_scale') || 0) + 1);
+      try {
+        const next = await call('set_scale', v);
+        if (next) {
+          store.settings = next;
+          notify('settings', next);
+        }
+      } catch (err) {
+        toast('error', err.message);
+      } finally {
+        inflight.set('ui_scale', inflight.get('ui_scale') - 1);
+        if (store.settings && overlay.open) refresh(store.settings, 'ui_scale');
+      }
     },
   });
 
@@ -282,6 +307,7 @@ function exampleName(suffix) {
 function refresh(s, justSaved = null) {
   if (!content.firstElementChild) return;
   if (!busy('theme') && ctl.theme) ctl.theme.set(s.theme);
+  if (!busy('ui_scale') && ctl.ui_scale) ctl.ui_scale.set(s.ui_scale);
   if (!busy('output_mode') && ctl.output_mode) ctl.output_mode.set(s.output_mode);
   const dirRow = content.querySelector('[data-row="output_dir"]');
   dirRow.hidden = s.output_mode !== 'folder';

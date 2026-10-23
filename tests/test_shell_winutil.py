@@ -11,14 +11,14 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from media_forge.shell import main, winutil  # noqa: E402
-from media_forge.shell.winutil import centered_rect, colorref, pick_window_size  # noqa: E402
+from media_forge.shell.winutil import centered_rect, colorref, pick_window_size, placed_rect  # noqa: E402
 
 LADDER = main.SIZE_LADDER
 
 
 class WindowSizeTest(unittest.TestCase):
     def test_ladder_is_3_4_largest_first(self):
-        self.assertEqual(LADDER, ((630, 840), (600, 800), (570, 760), (540, 720)))
+        self.assertEqual(LADDER, ((630, 840), (600, 800), (570, 760), (540, 720), (510, 680), (480, 640)))
         for w, h in LADDER:
             self.assertEqual(w * 4, h * 3)
 
@@ -33,8 +33,23 @@ class WindowSizeTest(unittest.TestCase):
         self.assertEqual(pick_window_size(LADDER, (599, 2000)), (570, 760))
 
     def test_smallest_step_when_nothing_fits_and_first_when_unknown(self):
-        self.assertEqual(pick_window_size(LADDER, (500, 600)), (540, 720))
+        self.assertEqual(pick_window_size(LADDER, (500, 600)), (480, 640))
         self.assertEqual(pick_window_size(LADDER, None), (630, 840))
+
+    def test_scaled_size_must_fit(self):
+        # The Scale setting multiplies the window size; the step is chosen for the scaled size.
+        self.assertEqual(pick_window_size(LADDER, (1920, 1032), 1.0), (630, 840))
+        self.assertEqual(pick_window_size(LADDER, (1920, 1032), 1.25), (600, 800))   # 750 x 1000 fits
+        self.assertEqual(pick_window_size(LADDER, (1920, 1032), 1.5), (510, 680))    # 765 x 1020 fits
+        self.assertEqual(pick_window_size(LADDER, (1920, 1032), 2.0), (480, 640))    # nothing fits: the smallest
+        self.assertEqual(pick_window_size(LADDER, (2560, 1400), 1.5), (630, 840))    # 945 x 1260 fits
+        self.assertEqual(pick_window_size(LADDER, None, 2.0), (630, 840))
+
+    def test_placed_rect_keeps_the_corner_inside_the_work_area(self):
+        self.assertEqual(placed_rect((630, 840), (300, 120), (0, 0, 1920, 1040)), (300, 120, 630, 840))
+        self.assertEqual(placed_rect((945, 1260), (300, 120), (0, 0, 1920, 1040)), (300, 0, 945, 1260))
+        self.assertEqual(placed_rect((945, 1260), (1500, 60), (0, 0, 1920, 1040)), (975, 0, 945, 1260))
+        self.assertEqual(placed_rect((630, 840), None, (0, 0, 1920, 1040)), centered_rect((630, 840), (0, 0, 1920, 1040)))
         with self.assertRaises(ValueError):
             pick_window_size((), (1920, 1080))
 

@@ -124,7 +124,7 @@ class ContractSurfaceTest(unittest.TestCase):
     def test_public_names_are_exactly_the_contract(self):
         public = sorted(n for n in dir(Bridge) if not n.startswith("_"))
         self.assertEqual(public, sorted(CONTRACT_METHODS))
-        self.assertEqual(len(CONTRACT_METHODS), 25)
+        self.assertEqual(len(CONTRACT_METHODS), 26)
 
     def test_parameter_names_visible_to_pywebview(self):
         expected = {

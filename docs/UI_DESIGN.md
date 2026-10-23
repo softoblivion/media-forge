@@ -12,8 +12,8 @@ records what Media Forge uses, its own screen and where it differs.
 
 | Part | From |
 |---|---|
-| `vendor/liquid_ui/css/` tokens, themes, base, scene, glass, components | The kit, unchanged (synced copy; never edited here). Fonts in `vendor/liquid_ui/fonts/`, named only in the kit's `tokens.css`. |
-| `vendor/liquid_ui/js/` motion, glass, overlay, controls, toast, background, theme, icons, format, update | The kit, unchanged: springs and the row / menu entrances, lenses, sheets and popovers, Segmented / Switch / Stepper / Select / Slider, toasts, the scene, the four themes with `applyTheme` and the theme row, line icons, en-US formatting, `mountUpdateControl` (version pill, update popover, update toasts, the "Updates" rows of the settings sheet). |
+| `vendor/liquid_ui/css/` tokens, themes, base, scene, glass, components, titlebar | The kit, unchanged (synced copy; never edited here). Fonts (Sora, Geist Mono) in `vendor/liquid_ui/fonts/`, named only in the kit's `tokens.css`; the type scale and the control heights in `tokens.css`. |
+| `vendor/liquid_ui/js/` motion, glass, overlay, controls, toast, background, theme, icons, format, update, titlebar, scale | The kit, unchanged: springs and the row / menu entrances, lenses, sheets and popovers, Segmented / Switch / Stepper / Select / Slider, toasts, the scene, the four themes with `applyTheme` and the theme row, line icons, en-US formatting, `mountUpdateControl` (version pill, update popover, update toasts, the "Updates" rows of the settings sheet), `mountTitlebar` (the title bar), `mountScaleControl` (the Scale row). |
 | `css/app.css`, `js/*.js`, `assets/icon.svg` | Media Forge: screen layout, file cards, settings panels, footer, empty state, drop veil, status banner, settings sheet content, store, bridge wrapper, mock, app glyph, app tokens (kind colours, footer height), the persistence of the chosen theme. |
 | Apple, WWDC25 "Meet Liquid Glass"; kube.io refraction article | Through the kit: lensing rather than scattering, materialize by ramping the lensing, controls lift into glass only while touched, tint only the primary action, scroll edge effect instead of hard clipping. |
 
@@ -65,8 +65,12 @@ the bridge answers); `main.js` calls the kit's `applyTheme(settings.theme)` and 
 settings object (the `State`, the `settings` event, the sheet's own saves, the update control's saves), so the
 attribute always ends on the shell's value. `applyTheme` also retints the scene (section 5).
 
-Fonts and type roles, radii, spacing, shadows, layout (`--gutter`, `--titlebar-h`): the kit, section 3. Every
-number that changes in place is `tabular-nums`.
+Fonts, the type scale, density, radii, spacing, shadows, layout (`--gutter`, `--titlebar-h`): the kit, section 3.
+Every text of the page is a role of the scale (`font: var(--t-<role>)`): card names, setting labels and the
+footer count are `label`, probe and state lines, hints and the footer's second line `caption`, kind chips and
+panel captions `section` (uppercase), notes, banners and the empty state's text `body`, the empty state's title
+`title`; no rule in `css/app.css` carries a `font-size`. Every number that changes in place is `tabular-nums`.
+The footer and the hero pill are 48 px (`--foot-h`).
 
 ## 4. Buttons and motion — the kit, sections 6 and 8
 
@@ -116,35 +120,36 @@ without input, reduced motion); the page's own loops hold with `html.is-still`.
 
 | File | Content |
 |---|---|
-| `index.html` | Static layout: `data-theme` and the theme bootstrap script, scene, lens defs, list scroller (FFmpeg banner, list, empty state), scroll edges, title bar (drag region, brand, version pill, window cluster), footer (counters capsule, the hero Start pill), overlay hosts (update popover, settings sheet), drop veil, toasts. Links the kit's six stylesheets (tokens, themes, base, scene, glass, components), then `css/app.css`. |
+| `index.html` | Static layout: `data-theme` and the theme bootstrap script, scene, lens defs, list scroller (FFmpeg banner, list, empty state), scroll edges, an empty `<header id="titlebar">` the kit fills, footer (counters capsule, the hero Start pill), overlay hosts (update popover, settings sheet), drop veil, toasts. Links the kit's seven stylesheets (tokens, themes, base, scene, glass, components, titlebar), then `css/app.css`. |
 | `vendor/liquid_ui/` | The kit (section 1): `css/`, `js/`, `fonts/`, `VENDORED.txt`. |
 | `css/app.css` | App tokens and the screen: scroll area and edges, status banner, cards, drawer and panels, footer and the hero's height / width, empty state, drop veil, size limit field, settings sheet content (output path, defaults panel, engine rows, about line). No button geometry or fill, no identity colours, no durations of its own. |
 | `assets/icon.svg` | App glyph (isometric block with an ember spark). |
-| `js/main.js` | Boot (theme sync, scene, light, toasts), title bar, empty state, FFmpeg banner, the kit's update control (`mountUpdateControl`, store `update`), paste of copied paths (`add_files`), keyboard, entrance, `toast` / `window` / `capabilities` events, error reporting through `log`. |
+| `js/main.js` | Boot (theme sync, scene, light, toasts), the kit's title bar (`mountTitlebar`: name, glyph, the window buttons call `window_minimize` / `window_close`, the gear toggles the settings sheet), empty state, FFmpeg banner, the kit's update control (`mountUpdateControl`, store `update`), paste of copied paths (`add_files`), keyboard, entrance, `toast` / `window` / `capabilities` events, error reporting through `log`. |
 | `js/api.js` | `window.mediaForge.dispatch` (registered at import, before `ready()`), event queue until `goLive()`, pywebview wait (1.5 s) or mock, `call()`, `on()`, `reportError()`. |
 | `js/mock.js` | Full mock of BRIDGE_API (section 7). |
 | `js/store.js` | Confirmed state (version, settings, caps, options, update, items) and watchers; `gpuFor(codec)`. |
 | `js/list.js` | File cards, state lines, the trash button of a collapsed card, drawer with the settings panel, Apply to all, Remove, Retry, Show in folder, Open, Start now, Cancel; events `item`, `items_added`, `item_removed`; the kit's `enterRow` / `leaveRow`. |
 | `js/panels.js` | `SettingsPanel` per kind (video / image / audio) and `planSummary`; used by cards and by the settings defaults. |
 | `js/footer.js` | Counters capsule (add, counts, size change, Clear split menu, Stop), the hero Start pill's states and width, `batch_done`. |
-| `js/settings.js` | Settings sheet: appearance (the kit's theme row), output, processing, defaults per kind, engine (capabilities); the "Updates" group is filled by the kit's `update.mountSettings()`. |
+| `js/settings.js` | Settings sheet: appearance (the kit's theme row and its Scale row, saved through `set_scale`), output, processing, defaults per kind, engine (capabilities); the "Updates" group is filled by the kit's `update.mountSettings()`; `toggleSettings()` for the title bar's gear. |
 | `js/dropzone.js` | Window-wide drop veil and ripple; mock drops. |
 | `js/sound.js` | Finish chime. |
 | `js/icons.js`, `js/format.js` | The kit's `icon()` plus `KIND_ICON` and the app glyph; the kit's formatting plus file counts, codec names, channels, sample rates, kind labels. |
 
-### 6.1 Layout (3:4, 540 x 720 to 630 x 840 and up)
+### 6.1 Layout (3:4, 480 x 640 to 630 x 840 and up)
 
-- Title bar (50 px, `pywebview-drag-region` on a full-size layer behind the items, on the brand and on the spacer;
-  buttons are siblings, never inside a drag element): glyph + "Media Forge", the version pill (mono `v2.0.0`, a dot
-  for `available` / `downloading` (pulsing) / `ready` (mint)), spacer, the window cluster capsule: gear | minimize,
-  close. No maximize (aspect lock).
+- Title bar: the kit's component (`mountTitlebar`, the kit, section 9.3; 44 px): glyph (20 px) + "Media Forge" +
+  the version pill (mono `v2.2.0`, a dot for `available` / `downloading` (pulsing) / `ready` (mint)) on the left,
+  an empty centre slot, the window cluster capsule on the right: settings | minimize, close. The drag layer
+  carries `pywebview-drag-region`; the left cluster lets the pointer through to it and the buttons are siblings
+  of it. No maximize (fixed size).
 - The list scrolls under the title bar and the footer; soft scroll edges (blur + gradient, masked) sit above it, so
   the title-bar and footer lenses refract the cards passing under them. The scrollbar track is inset to the free area.
 - Empty state (no items): a `panel` lens with three fanned tiles in the kind colours (video, photo, waveform), "Drop
   video, photo or audio files", "Compress, upscale or convert them. Each file keeps its own settings.", tinted
   "Choose files", the Ctrl+O hint and a line of common formats. The footer is hidden while the list is empty and
   rises with a spring when the first files arrive.
-- Card: 64 x 48 thumbnail (56 x 44 below 600 px), name, kind chip (Video / Photo / Audio; none for a file that could
+- Card: 60 x 45 thumbnail (54 x 41 below 600 px), name, kind chip (Video / Photo / Audio; none for a file that could
   not be read), probe line (`1920×1080 · 1:12 · H.264 · 46.8 MB`; audio `3:41 · AAC · 48 kHz · Stereo · 8.4 MB`), and
   one state line. On the right of the head: a trash button (the kit's small glyph button, `--rose` icon, rose fill
   on hover and press, gel press, tooltip "Remove"; `remove_item(id)`, which also cancels a running file) while the
@@ -166,7 +171,9 @@ without input, reduced motion); the page's own loops hold with `html.is-still`.
   Clear done, Clear failed, Clear all except running, Clear all] — while files run the Clear split becomes "Stop"
   (`cancel_all`); then the hero Start pill.
 - Settings sheet (modal, grows from the gear): Appearance (Theme: Dusk / Nova / Frost / Bloom, the kit's row;
-  applied at once, saved as `theme`, a refusal shows the sentence as a toast and restores the confirmed theme),
+  applied at once, saved as `theme`, a refusal shows the sentence as a toast and restores the confirmed theme;
+  Scale: 100 / 125 / 150 / 175 / 200 %, the kit's row, saved through `set_scale`: the shell zooms the page and
+  resizes the window at once, ARCHITECTURE 7, and the confirmed value sets the row),
   Output (Save to: Beside the source / One folder; folder path + Choose… + open; File name suffix with a live
   example), Processing (Files at the same time 1-3 stepper, Open the folder when done, Sound when done), Defaults
   for new files (Video / Photo / Audio + the same panel), Engine (FFmpeg version and status, GPU and NVENC codecs,
@@ -250,8 +257,9 @@ adds them through `add_files`. Visible `:focus-visible` rings everywhere (the th
 - Neutral and factual: say what a control does or what happened, no filler,
   no exclamation marks. English (US), sentence case: "Choose files", "Start", "Clear done", "Show in folder", "Open",
   "Retry", "Apply to all video", "Remove", "Start now", "Cancel", "Check for updates", "Restart to update", "Try again".
-  The theme row's copy is the kit's: "Theme", "Background colour and accent of the window", "Dusk", "Nova", "Frost",
-  "Bloom"; the group is "Appearance".
+  The theme and scale rows' copy is the kit's: "Theme", "Background colour and accent of the window", "Dusk",
+  "Nova", "Frost", "Bloom", "Scale", "Size of the window and its text", "100 %" .. "200 %"; the group is
+  "Appearance".
 - The bridge's kind `image` reads as "Photo" (chip), "photos" (Apply to all photos, counts). Format and codec labels
   are shown exactly as `Options` gives them; summaries shorten "MP3 · audio only" to "MP3".
 - Plurals through `plural()` / `nFiles()` / `nKind()`; sizes in B / KB / MB / GB, percentages with a no-break space

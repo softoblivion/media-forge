@@ -70,7 +70,7 @@ up-to-date Windows 10). No installer, no admin rights.
 | **Per-file settings** | Every file opens its own panel; **Apply to all video / photos / audio** copies one file's settings to the others; the defaults for new files live in Settings. |
 | **Batch input** | Drag and drop of files and folders (one level deep), several at once; a native multi-select dialog; duplicates are added once. Up to three files run in parallel. |
 | **Outputs** | Next to the source or into one folder; a numbered suffix instead of an overwrite; **Show in folder**, **Open**, **Run again**; an optional folder opening and a sound when a batch finishes. |
-| **Liquid Glass UI** | A 3:4 portrait window with refracting glass controls, spring motion and an animated background in one of four colour themes (Dusk, Nova, Frost, Bloom); embedded Unbounded and Geist Mono fonts; animation stops when nothing moves. |
+| **Liquid Glass UI** | A 3:4 portrait window with refracting glass controls, spring motion and an animated background in one of four colour themes (Dusk, Nova, Frost, Bloom); a Scale setting from 100 to 200 %; embedded Sora and Geist Mono fonts; animation stops when nothing moves. |
 | **Self-updating app** | New releases are detected on launch and then every 5 minutes, downloaded in the background (or on **Download**), verified by size and SHA-256 and installed on **Restart**. |
 
 ## Documentation
