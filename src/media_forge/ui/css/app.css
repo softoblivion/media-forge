@@ -896,7 +896,7 @@ html.has-items .edge-bottom { opacity: 1; }
 .eng-row.is-busy .eng-dot { background: var(--amber); animation: ver-pulse 1.4s ease-in-out infinite; }
 .eng-row.is-bad .eng-dot { background: var(--rose); }
 .eng-name { font: var(--t-label); letter-spacing: var(--tr-label); }
-.eng-val { font: var(--t-mono-s); --ff-feat: var(--ff-mono); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+.eng-val { font: var(--t-mono-s); --ff-feat: var(--ff-mono); color: var(--ink-2); overflow-wrap: anywhere; user-select: text; }   /* wraps: a long GPU name stays whole */
 .eng-st { font: var(--t-caption); letter-spacing: var(--tr-caption); color: var(--ink-3); text-align: right; }
 
 .set-about {
