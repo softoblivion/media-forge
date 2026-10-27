@@ -78,10 +78,6 @@ up-to-date Windows 10). No installer, no admin rights.
 | Document | What it covers |
 |---|---|
 | [User guide](docs/USER_GUIDE.md) | Usage, keyboard, settings, formats and codecs, size limit, data folder, updates |
-| [Architecture](docs/ARCHITECTURE.md) | Stack, repository layout, modules, runtime data, behaviour, window |
-| [Bridge API](docs/BRIDGE_API.md) | The JS ↔ Python contract: methods, events, payload types, option tables |
-| [Core](docs/CORE.md) | Probing, FFmpeg command lines, quality mapping, size targeting, upscale, jobs |
-| [UI design](docs/UI_DESIGN.md) | Liquid Glass material, background, motion, components, copy rules |
 | [Build](docs/BUILD.md) | Running from source, tests, building the exe, releasing, troubleshooting |
 | [Release notes](docs/releases/) | What changed in every version |
 | [Third-party components](docs/THIRD_PARTY.md) | What is bundled or downloaded, with licences |
