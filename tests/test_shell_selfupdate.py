@@ -46,7 +46,7 @@ class AdapterTest(unittest.TestCase):
     def test_reexports_are_the_vendored_objects(self):
         self.assertIs(selfupdate.SelfUpdater, vendored.SelfUpdater)
         self.assertIs(selfupdate.run_apply, vendored.run_apply)
-        self.assertEqual(vendored.__version__, "0.3.0")
+        self.assertEqual(vendored.__version__, "0.4.0")
 
     def test_config_from_source(self):
         statuses = []

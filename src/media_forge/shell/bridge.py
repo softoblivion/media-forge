@@ -351,7 +351,8 @@ class EventPump:
 def _default_update_status(version: str) -> dict:
     """UpdateStatus while no updater is attached (BRIDGE_API.md 3.8)."""
     return {"stage": "idle", "current": version, "latest": None, "notes": None, "size": None, "published_at": None,
-            "progress": None, "message": "Updates are not checked yet", "checked_at": None, "can_apply": False}
+            "progress": None, "message": "Updates are not checked yet", "checked_at": None, "can_apply": False,
+            "major": False}
 
 
 class Bridge:
@@ -483,6 +484,8 @@ class Bridge:
         self._emit("update", status)
         if status.get("stage") != "available" or not self._setting("auto_download_updates", True):
             return
+        if status.get("major"):
+            return  # a new major version is the user's choice (Switch), never downloaded in the background
         version = str(status.get("latest") or "")
         with self._lock:
             if self._auto_download_for == version:
@@ -498,7 +501,7 @@ class Bridge:
         for _ in range(50):
             if updater.status().get("stage") != "available":
                 return
-            updater.download_background()
+            updater.download_background(auto=True)  # the library refuses this for a new major version too
             if updater.status().get("stage") == "downloading":
                 return
             time.sleep(0.1)

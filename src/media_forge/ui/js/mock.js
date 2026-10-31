@@ -7,7 +7,8 @@
 // options exactly as 3.7, settings persisted in localStorage, the self-update cycle on demand.
 //
 // URL flags: items=N (N ready files at start), demo=1 (one file in every state), fast=1 (jobs 4x
-// faster), update=available|uptodate|error (result of the launch check), nvenc=0 (no NVIDIA GPU),
+// faster), update=available|major|uptodate|error (result of the launch check; major = a new major
+// version, offered as a choice), notes=long (40 bullets of release notes), nvenc=0 (no NVIDIA GPU),
 // ffmpeg=downloading (FFmpeg arrives after a simulated download).
 // Development hooks (underscored, not part of the contract): _simulate_drop(files).
 
@@ -19,6 +20,7 @@ export function createMock({ params, dispatch }) {
   const pace = fast ? 4 : 1;
   const noGpu = params.get('nvenc') === '0';
   const updateFlag = params.get('update') || '';
+  const longNotes = params.get('notes') === 'long';
 
   // ---- event delivery: buffered until ready(), item events coalesced per id ------------------
   let live = false;
@@ -158,6 +160,7 @@ export function createMock({ params, dispatch }) {
     open_when_done: false,
     sound_when_done: true,
     auto_download_updates: true,
+    skipped_major: null,
     theme: 'nova',
     ui_scale: 100,
     defaults: clone(DEFAULTS),
@@ -222,6 +225,9 @@ export function createMock({ params, dispatch }) {
         case 'sound_when_done':
         case 'auto_download_updates':
           if (typeof v === 'boolean') next[k] = v;
+          break;
+        case 'skipped_major':
+          next.skipped_major = Number.isInteger(v) && v >= 1 ? v : null;
           break;
         case 'theme':
           next.theme = THEMES.includes(v) ? v : BASE_SETTINGS.theme;
@@ -664,10 +670,13 @@ export function createMock({ params, dispatch }) {
   }
 
   // ---- update -------------------------------------------------------------------------------------
-  let update = { stage: 'idle', current: VERSION, latest: null, notes: null, size: null, published_at: null, progress: null, message: 'Updates are not checked yet', checked_at: null, can_apply: false };
+  let update = { stage: 'idle', current: VERSION, latest: null, notes: null, size: null, published_at: null, progress: null, message: 'Updates are not checked yet', checked_at: null, can_apply: false, major: false };
   let checks = 0;
   let busy = false;
   const NOTES = '## Media Forge 0.2.0\n\n- Size limits for GIF output\n- FSRCNN upscale uses all CPU cores\n- **Open when done** opens the output folder once per batch\n- Details in the [project notes](https://github.com/softoblivion/media-forge/releases)\n\n### Fixes\n\n- HEIC photos with a rotation flag are written upright\n- The size field accepts values like `0.5`';
+  const LONG_NOTES = ['## What changes', '', 'A long release body.', '', '---', '', '### Changed', '']
+    .concat(Array.from({ length: 40 }, (_, i) => `- **Change ${i + 1}** — a line of release notes long enough to wrap once in the update sheet.`))
+    .join('\n');
   const setUpdate = (patch) => {
     update = { ...update, ...patch };
     emit('update', update);
@@ -682,15 +691,18 @@ export function createMock({ params, dispatch }) {
     setTimeout(() => {
       busy = false;
       const now = Date.now() / 1000;
-      let result = launch ? (updateFlag === 'available' ? 'available' : updateFlag === 'error' ? 'error' : 'up_to_date') : updateFlag === 'uptodate' ? 'up_to_date' : 'available';
+      let result = launch ? (updateFlag === 'available' || updateFlag === 'major' ? 'available' : updateFlag === 'error' ? 'error' : 'up_to_date') : updateFlag === 'uptodate' ? 'up_to_date' : 'available';
       if (!launch && updateFlag === 'error' && checks > 1) result = 'available';
       if (update.current !== VERSION) result = 'up_to_date';
       if (result === 'available') {
-        setUpdate({ stage: 'available', latest: '0.2.0', notes: NOTES, size: 61_342_720, published_at: now - 3600 * 26, message: 'Version 0.2.0 is available', checked_at: now, can_apply: false });
+        const major = updateFlag === 'major';
+        const latest = major ? '2.0.0' : '0.2.0';
+        const message = major ? `Version ${latest} is available as a new major version` : `Version ${latest} is available`;
+        setUpdate({ stage: 'available', latest, notes: longNotes ? LONG_NOTES : NOTES, size: 61_342_720, published_at: now - 3600 * 26, message, checked_at: now, can_apply: false, major });
       } else if (result === 'error') {
-        setUpdate({ stage: 'error', latest: null, notes: null, size: null, published_at: null, message: 'No internet connection', checked_at: now });
+        setUpdate({ stage: 'error', latest: null, notes: null, size: null, published_at: null, message: 'No internet connection', checked_at: now, major: false });
       } else {
-        setUpdate({ stage: 'up_to_date', latest: update.current, notes: null, size: null, published_at: null, message: 'Media Forge is up to date', checked_at: now });
+        setUpdate({ stage: 'up_to_date', latest: update.current, notes: null, size: null, published_at: null, message: 'Media Forge is up to date', checked_at: now, major: false });
       }
     }, 1300 / Math.sqrt(pace));
     return clone(update);

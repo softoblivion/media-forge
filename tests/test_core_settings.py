@@ -91,6 +91,26 @@ class SettingsTest(ScratchCase):
         s.paths.settings_file.write_text(json.dumps({"auto_download_updates": False}), encoding="utf-8")
         self.assertIs(s.load()["auto_download_updates"], False)  # a copy that turned it off keeps it off
 
+    def test_skipped_major_is_persisted(self):
+        s = self.fresh("skipped_major")
+        self.assertIsNone(s.load()["skipped_major"])  # absent from older files: nothing skipped
+        self.assertEqual(s.patch({"skipped_major": 3})["skipped_major"], 3)
+        self.assertEqual(json.loads(s.paths.settings_file.read_text(encoding="utf-8"))["skipped_major"], 3)
+        self.assertEqual(s.load()["skipped_major"], 3)  # survives a restart
+        self.assertIsNone(s.patch({"skipped_major": None})["skipped_major"])
+        self.assertIsNone(s.load()["skipped_major"])
+
+    def test_skipped_major_values(self):
+        from media_forge.core.settings import normalize_major
+        for value, want in ((3, 3), (10, 10), (3.0, 3), ("4", 4), (0, None), (-1, None), (True, None), (None, None),
+                            ("x", None), (2.5, None), ([3], None)):
+            self.assertEqual(normalize_major(value), want, value)
+        s = self.fresh("skipped_major_bad")
+        s.paths.settings_file.write_text(json.dumps({"skipped_major": "junk", "suffix": "_x"}), encoding="utf-8")
+        data = s.load()
+        self.assertIsNone(data["skipped_major"])
+        self.assertEqual(data["suffix"], "_x")
+
     def test_interval_key_of_older_versions_is_dropped(self):
         s = self.fresh("old_interval")
         text = json.dumps({"version": 1, "update_check_interval": "6h", "suffix": "_x"})

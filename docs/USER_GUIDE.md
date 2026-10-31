@@ -94,7 +94,10 @@ check is retried later with a growing wait of up to an hour, and nothing is chec
 A new version opens a sheet with its release notes, size and date; **Install** fetches it (the app does it on its
 own unless **Download updates automatically** is turned off), verifies the byte size and the SHA-256 against the
 release's `SHA256SUMS`, and restarts the app once the file is verified; **Later** closes the sheet until you click
-the version label in the title bar. A version downloaded in the background still installs only on Restart. The
+the version label in the title bar. A version downloaded in the background still installs only on Restart.
+A new major version is never fetched on its own: its sheet offers **Switch to X.0** (fetch, verify, restart as
+above) and **Stay on N.x**, which keeps the current version and stops the notice for that major version; clicking
+the version label still offers the switch later. The
 downloaded exe waits for the app to exit, keeps the old file as `MediaForge.exe.old` until the new one has
 started, and relaunches it. If anything fails the current exe stays untouched. Every release ships two assets:
 `MediaForge.exe` and `SHA256SUMS`. Release notes: [`releases/`](releases/).
