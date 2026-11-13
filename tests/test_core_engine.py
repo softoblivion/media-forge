@@ -8,7 +8,7 @@ import unittest
 
 from media_forge.core import catalog
 from media_forge.core.engine import Engine
-from media_forge.core.errors import UserError
+from media_forge.core.errors import Cancelled, UserError
 from media_forge.core.jobs import Item, JobQueue
 from media_forge.core.paths import AppPaths
 
@@ -357,6 +357,8 @@ class QueueTest(unittest.TestCase):
                 raise UserError("Broken.")
             while not ctx.cancel.is_set() and not gate.is_set():
                 time.sleep(0.01)
+            if ctx.cancel.is_set():
+                raise Cancelled()  # as the engine's runner does
             return {}
 
         events = []
@@ -422,6 +424,23 @@ class QueueTest(unittest.TestCase):
         gates["a"].set()
         self.assertTrue(q.wait_idle(10))
         self.assertEqual(peak[0], 2)  # parallel_jobs = 2 holds
+        q.stop()
+
+    def test_cancel_after_the_runner_returned_keeps_the_output(self):
+        """A cancel that arrives once the runner has returned its output leaves the item done (the file exists)."""
+        def runner(item, ctx):
+            ctx.cancel.set()  # the cancel lands after the runner's last cancel point
+            return {"path": "out.mp4", "size": 1}
+
+        events = []
+        q = JobQueue(lambda n, p: events.append((n, p)), runner, workers=1, image_lane=False)
+        q.start()
+        q.add(Item(id="a", path="a", name="a", kind="video", size=1, settings={}, status="ready"))
+        q.start_items(None)
+        self.assertTrue(q.wait_idle(5))
+        self.assertEqual(q.get("a").status, "done")
+        self.assertEqual(q.get("a").output, {"path": "out.mp4", "size": 1})
+        self.assertEqual([p for n, p in events if n == "batch_done"], [{"done": 1, "failed": 0, "cancelled": 0}])
         q.stop()
 
 

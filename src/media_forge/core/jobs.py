@@ -412,10 +412,10 @@ class JobQueue:
         ctx = JobContext(self, item_id, job_id, cancel)
         status, output, error = "error", None, None
         try:
+            # A runner that returned has written its output: a cancel that lands after its last cancel point (the
+            # engine checks once more before it returns) is ignored and the item ends done with the file kept.
             output = self._runner(snapshot, ctx)
             status = "done"
-            if cancel.is_set():
-                raise Cancelled()
         except Cancelled:
             status, output = "cancelled", None
         except UserError as exc:
