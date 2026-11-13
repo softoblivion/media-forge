@@ -51,6 +51,8 @@ VIDEO_FORMATS = [
     {"id": "webm", "label": "WebM", "codecs": ["vp9", "av1"], "audio": True},
     {"id": "mov", "label": "MOV", "codecs": ["h264", "h265", "prores"], "audio": True},
     {"id": "gif", "label": "GIF", "codecs": [], "audio": False},
+    {"id": "webp", "label": "WebP · animated", "codecs": [], "audio": False},
+    {"id": "apng", "label": "PNG · animated", "codecs": [], "audio": False},
     {"id": "mp3", "label": "MP3 · audio only", "codecs": [], "audio": True},
     {"id": "m4a", "label": "M4A · audio only", "codecs": [], "audio": True},
     {"id": "opus", "label": "Opus · audio only", "codecs": [], "audio": True},
@@ -106,6 +108,8 @@ UPSCALE_METHODS = [
 VIDEO_UPSCALE_METHODS = UPSCALE_METHODS[:2]
 
 AUDIO_ONLY_VIDEO_FORMATS = ("mp3", "m4a", "opus", "flac", "wav")
+ANIMATED_VIDEO_FORMATS = ("gif", "webp", "apng")  # animated image outputs: no audio, no size limit
+OUTPUT_EXTENSIONS = {"apng": "png"}
 LOSSLESS_AUDIO_FORMATS = ("flac", "wav")
 LOSSY_IMAGE_FORMATS = tuple(f["id"] for f in IMAGE_FORMATS if f["lossy"])
 OPUS_MAX_KBPS = 256
@@ -306,8 +310,9 @@ def merge(kind: str, current: Mapping[str, Any] | None, patch: Mapping[str, Any]
 # --- output names (CORE.md 5.1) --------------------------------------------------------------------------------
 
 def output_extension(kind: str, settings: Mapping[str, Any]) -> str:
-    """Extension without dot for the item's output."""
-    return str(settings["format"])
+    """Extension without dot for the item's output (an animated PNG is written as `.png`)."""
+    fmt = str(settings["format"])
+    return OUTPUT_EXTENSIONS.get(fmt, fmt)
 
 
 def is_audio_only(kind: str, settings: Mapping[str, Any]) -> bool:

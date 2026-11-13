@@ -30,6 +30,16 @@ def astreams(data: dict) -> list[dict]:
     return [s for s in data["streams"] if s["codec_type"] == "audio"]
 
 
+def count_frames(path: Path, codec: str) -> int:
+    """Decoded frame count of the first video stream, after checking its codec."""
+    out = subprocess.run([FFPROBE, "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries",
+                          "stream=codec_name,nb_read_frames", "-of", "json", str(path)], capture_output=True,
+                         check=True, creationflags=procs.CREATE_NO_WINDOW)
+    stream = json.loads(out.stdout)["streams"][0]
+    assert stream["codec_name"] == codec, stream
+    return int(stream["nb_read_frames"])
+
+
 @needs_ffmpeg
 class VideoTest(ScratchCase):
     def run_job(self, src: str, out_name: str, model: Model | None = None, caps_override=None, **settings):
@@ -140,6 +150,23 @@ class VideoTest(ScratchCase):
         self.assertLessEqual(probe._rate(stream["r_frame_rate"]), 15.01)
         self.assertLessEqual(int(stream["nb_frames"]), 31)
         self.assertEqual(astreams(data), [])
+
+    def test_animated_images_keep_their_frames(self):
+        """Animated WebP and APNG sources stay animated in every animated output, frame for frame."""
+        cases = (("anim.webp", "gif", "gif"), ("anim.webp", "webp", "webp_anim"), ("anim.webp", "apng", "apng"),
+                 ("anim.png", "webp", "webp_anim"), ("anim.png", "gif", "gif"), ("anim.gif", "webp", "webp_anim"))
+        for src, fmt, codec in cases:
+            with self.subTest(src=src, fmt=fmt):
+                out_name = f"{src.replace('.', '_')}_to.{catalog.output_extension('video', {'format': fmt})}"
+                out, plan, _ = self.run_job(src, out_name, format=fmt, quality=70)
+                self.assertEqual(count_frames(out, codec), 12 if src != "anim.gif" else 10)
+                self.assertEqual(plan.steps[0].args.count("-an"), 1)
+        data = ffprobe(self.out / "anim_png_to.webp")
+        self.assertEqual(vstream(data)["pix_fmt"], "argb")  # the APNG's transparency is kept
+        self.assertTrue((self.out / "anim_webp_to.png").is_file())  # an animated PNG is written as .png
+        with self.assertRaises(UserError) as cm:
+            self.run_job("anim.webp", "capped.webp", format="webp", size_limit_mb=1)
+        self.assertEqual(cm.exception.message, "This format cannot be limited in size.")
 
     def test_audio_extraction(self):
         out, plan, _ = self.run_job("clip.mp4", "extract.mp3", format="mp3", audio_bitrate_k=128)

@@ -112,6 +112,14 @@ def _make(name: str, path: Path) -> None:
             "-filter_complex", "[0][1]amix=inputs=2", "-ac", "2", "-c:a", "flac", str(path))
     elif name == "anim.gif":
         _ff("-f", "lavfi", "-i", "testsrc2=size=160x120:rate=10", "-t", "1", str(path))
+    elif name in ("anim.webp", "anim.png"):  # 12 frames of 100 ms, 160x120; the APNG has transparency
+        frames = []
+        for i in range(12):
+            frame = Image.new("RGBA", (160, 120), (0, 0, 0, 0 if name == "anim.png" else 255))
+            ImageDraw.Draw(frame).rectangle([i * 10, 30, i * 10 + 40, 90], fill=(255, 40 + i * 15, 60, 255))
+            frames.append(frame)
+        extra = {"lossless": False, "quality": 80} if name == "anim.webp" else {}
+        frames[0].save(path, save_all=True, append_images=frames[1:], duration=100, loop=0, **extra)
     elif name == "notmedia.mp4":
         path.write_bytes(b"this is not a media file\n" * 10)
     elif name in ("photo.jpg", "photo.png", "photo_exif.jpg", "photo_xmp_orient.jpg", "single.gif", "photo.webp", "photo.bmp",

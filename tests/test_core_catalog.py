@@ -109,7 +109,7 @@ class NormalizeTest(unittest.TestCase):
     def test_options_shape(self):
         opts = catalog.options(CAPS_GPU)
         self.assertEqual([f["id"] for f in opts["video"]["formats"]],
-                         ["mp4", "mkv", "webm", "mov", "gif", "mp3", "m4a", "opus", "flac", "wav"])
+                         ["mp4", "mkv", "webm", "mov", "gif", "webp", "apng", "mp3", "m4a", "opus", "flac", "wav"])
         self.assertEqual(opts["video"]["audio_bitrates"], [96, 128, 192, 256, 320])
         self.assertEqual(opts["audio"]["bitrates"], [64, 96, 128, 160, 192, 256, 320])
         self.assertEqual([m["id"] for m in opts["upscale_methods"]], ["lanczos", "fsrcnn", "edsr"])

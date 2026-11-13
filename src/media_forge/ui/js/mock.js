@@ -385,7 +385,7 @@ export function createMock({ params, dispatch }) {
 
   function extFor(it) {
     const f = it.settings.format;
-    return f;
+    return f === 'apng' ? 'png' : f;
   }
 
   function outputPath(it) {
@@ -1127,6 +1127,8 @@ function buildOptions(caps) {
         { id: 'webm', label: 'WebM', codecs: ['vp9', 'av1'], audio: true },
         { id: 'mov', label: 'MOV', codecs: ['h264', 'h265', 'prores'], audio: true },
         { id: 'gif', label: 'GIF', codecs: [], audio: false },
+        { id: 'webp', label: 'WebP · animated', codecs: [], audio: false },
+        { id: 'apng', label: 'PNG · animated', codecs: [], audio: false },
         { id: 'mp3', label: 'MP3 · audio only', codecs: [], audio: true },
         { id: 'm4a', label: 'M4A · audio only', codecs: [], audio: true },
         { id: 'opus', label: 'Opus · audio only', codecs: [], audio: true },

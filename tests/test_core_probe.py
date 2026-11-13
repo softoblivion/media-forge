@@ -77,6 +77,22 @@ class ProbeTest(ScratchCase):
         self.assertEqual(anim.format, "gif")
         self.assertEqual((anim.width, anim.height), (160, 120))
 
+    def test_animated_webp_and_apng_are_videos(self):
+        for name, fmt, alpha in (("anim.webp", "webp", None), ("anim.png", "apng", True)):
+            with self.subTest(name=name):
+                info = probe.probe(media(name), FFPROBE)
+                self.assertEqual((info.kind, info.format, info.width, info.height), ("video", fmt, 160, 120))
+                self.assertAlmostEqual(info.duration, 1.2, delta=0.01)  # from the frame durations
+                self.assertEqual(info.total_frames, 12)
+                if alpha is not None:  # Pillow and ffmpeg read every animated WebP as RGBA
+                    self.assertEqual(info.has_alpha, alpha)
+                self.assertIsNotNone(info.bitrate)
+                self.assertTrue(probe.thumbnail(media(name), "video", info, FFMPEG).startswith("data:image/"))
+        self.assertEqual(probe.probe(media("photo.webp"), FFPROBE).kind, "image")  # a still stays an image
+        with self.assertRaises(UserError) as cm:  # an animation needs ffprobe
+            probe.probe(media("anim.webp"), None)
+        self.assertEqual(cm.exception.message, "ffmpeg is not available.")
+
     def test_errors(self):
         with self.assertRaises(UserError) as cm:
             probe.probe(media("notmedia.mp4"), FFPROBE)

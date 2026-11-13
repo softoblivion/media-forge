@@ -24,7 +24,9 @@ FITS = {"1080p": 1080, "720p": 720, "480p": 480}
 RC_MAP = {"h264": (36.0, 0.21), "h265": (38.0, 0.22), "av1": (50.0, 0.30), "vp9": (45.0, 0.30)}
 RC_RANGE = {"h264": (0, 51), "h265": (0, 51), "av1": (0, 63), "vp9": (0, 63)}
 NVENC = {"h264": "h264_nvenc", "h265": "hevc_nvenc", "av1": "av1_nvenc"}
-MUXERS = {"mp4": "mp4", "mkv": "matroska", "webm": "webm", "mov": "mov", "gif": "gif"}
+MUXERS = {"mp4": "mp4", "mkv": "matroska", "webm": "webm", "mov": "mov", "gif": "gif", "webp": "webp",
+          "apng": "apng"}
+LOOP_ARGS = {"gif": ["-loop", "0"], "webp": ["-loop", "0"], "apng": ["-plays", "0"]}  # repeat for ever
 # audio codecs a container takes as a stream copy (None = any)
 AUDIO_COPY_OK: dict[str, set[str] | None] = {
     "mp4": {"aac", "mp3"},
@@ -84,7 +86,7 @@ def _even_fit(w: int, h: int, target: int) -> tuple[int, int] | None:
 
 def _audio_args(settings: Mapping[str, Any], info: ProbeInfo, fmt: str) -> tuple[list[str], float, bool]:
     """(ffmpeg audio args, audio kbps for the size budget, audio included)."""
-    if fmt == "gif" or not info.has_audio or settings["audio"] == "none":
+    if fmt in catalog.ANIMATED_VIDEO_FORMATS or not info.has_audio or settings["audio"] == "none":
         return ["-an"], 0.0, False
     br = int(settings["audio_bitrate_k"])
     allowed = AUDIO_COPY_OK.get(fmt)
@@ -169,20 +171,21 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
     if not info.has_video or not info.width or not info.height:
         raise UserError(MSG_NO_VIDEO)
     is_gif = fmt == "gif"
-    codec = "gif" if is_gif else settings["codec"]
+    animated = fmt in catalog.ANIMATED_VIDEO_FORMATS  # GIF, animated WebP, animated PNG
+    codec = fmt if animated else settings["codec"]
     strip = bool(settings["strip_metadata"])
     quality = int(settings["quality"])
     limit = settings.get("size_limit_mb")
     duration = info.duration
     w, h = int(info.width), int(info.height)
-    plan = Plan(kind="gif" if is_gif else "encode", output=out, duration=duration, codec=codec)
+    plan = Plan(kind="gif" if animated else "encode", output=out, duration=duration, codec=codec)
     if limit is not None:
-        if is_gif or codec in ("prores", "copy"):
+        if animated or codec in ("prores", "copy"):
             raise UserError(MSG_CANNOT_LIMIT)
         if not duration:
             raise UserError(MSG_NO_DURATION)
         plan.size_limit_bytes = int(limit * 1024 * 1024)
-    encoder = "cpu" if is_gif else resolve_encoder(codec, settings["encoder"], caps, force_cpu)
+    encoder = "cpu" if animated else resolve_encoder(codec, settings["encoder"], caps, force_cpu)
     plan.encoder = encoder if codec in NVENC else "cpu"
     src_fps = info.fps or 30.0
     fps_choice = settings["fps"]
@@ -226,7 +229,7 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
             if dims:
                 out_w, out_h = dims
                 filters.append(f"scale={out_w}:{out_h}:flags=lanczos")
-        if not is_gif and not model_upscale and (out_w % 2 or out_h % 2):
+        if not animated and not model_upscale and (out_w % 2 or out_h % 2):
             out_w, out_h = out_w - out_w % 2, out_h - out_h % 2
             filters.append(f"crop={out_w}:{out_h}:0:0")
         if is_gif:
@@ -243,8 +246,7 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
     tail_args: list[str] = []
     if fmt in ("mp4", "mov"):
         tail_args += ["-movflags", "+faststart"]
-    if is_gif:
-        tail_args += ["-loop", "0"]
+    tail_args += LOOP_ARGS.get(fmt, [])
     tail_args += ["-f", MUXERS[fmt], str(out)]
     hw = ["-hwaccel", "auto"] if encoder == "gpu" and not model_upscale else []
 
@@ -266,7 +268,9 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
         else:
             encoder_args += ["-map", "0:v:0"]
         encoder_args += ["-vf", enc_vf]
-        if not is_gif:
+        if animated:
+            encoder_args += _animated_args(fmt, quality)
+        else:
             encoder_args += _codec_args(codec, encoder, quality, kbps, gop, strip, fmt)
             encoder_args += ["-colorspace", matrix.replace("bt601", "smpte170m")]
         encoder_args += audio_args
@@ -283,8 +287,9 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
     head = [ffmpeg] + HEAD + hw + ["-i", str(src)]
     vmap = ["-map", "0:v:0"] + (["-map", "0:a:0?"] if with_audio else [])
     vf_args = ["-vf", vf] if vf else []
-    if is_gif:
-        plan.steps.append(Step(head + vmap + vf_args + ["-an"] + meta + tail_args, "encoding"))
+    if animated:
+        plan.steps.append(Step(head + vmap + vf_args + _animated_args(fmt, quality) + ["-an"] + meta + tail_args,
+                               "encoding"))
         return plan
     two_pass = kbps is not None and encoder == "cpu" and codec in ("h264", "h265")
     if two_pass:
@@ -308,7 +313,20 @@ def _fps_text(fps: float) -> str:
     return str(int(fps)) if float(fps).is_integer() else f"{fps:.3f}"
 
 
+def _animated_args(fmt: str, quality: int) -> list[str]:
+    """Encoder arguments of the animated image outputs (GIF takes its palette from the filter chain)."""
+    if fmt == "webp":
+        return ["-c:v", "libwebp_anim", "-lossless", "0", "-quality", str(quality)]
+    if fmt == "apng":
+        return ["-c:v", "apng", "-pred", "mixed"]
+    return []
+
+
 def _pix_fmt(codec: str, encoder: str, info: ProbeInfo, model_upscale: bool) -> str:
+    if codec == "webp":
+        return "yuva420p" if info.has_alpha and not model_upscale else "yuv420p"
+    if codec == "apng":
+        return "rgba" if info.has_alpha and not model_upscale else "rgb24"
     if codec == "prores":
         return "yuv422p10le"
     if info.ten_bit and not model_upscale and codec in ("h265", "av1"):

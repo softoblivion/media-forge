@@ -40,6 +40,10 @@ PROBE_TIMEOUT = 30.0
 THUMB_TIMEOUT = 30.0
 _IMAGE_PIPE_FORMATS = ("image2", "png_pipe", "jpeg_pipe", "webp_pipe", "bmp_pipe", "tiff_pipe", "gif_pipe",
                        "jpegxl_pipe", "avif", "heif")
+# Pillow format of an image with more than one frame -> `ProbeInfo.format` of the video it becomes.
+ANIMATED_IMAGES = {"GIF": "gif", "WEBP": "webp", "PNG": "apng"}
+ANIMATED_CODECS = ("gif", "webp_anim", "apng")
+ALPHA_PIX_FMTS = ("argb", "rgba", "abgr", "bgra", "yuva420p", "rgba64be", "rgba64le", "ya8", "ya16be", "ya16le")
 
 
 @dataclass
@@ -225,6 +229,20 @@ def info_from_image(path: Path) -> ProbeInfo | None:
     return info
 
 
+def animation_duration(path: Path) -> float | None:
+    """Sum of the frame durations Pillow reads from an animated image, in seconds; None when unknown."""
+    try:
+        with Image.open(path) as img:
+            total = 0
+            for index in range(int(getattr(img, "n_frames", 1) or 1)):
+                img.seek(index)
+                img.load()  # the WebP reader sets a frame's duration when it decodes the frame
+                total += int(img.info.get("duration") or 0)
+    except Exception:  # noqa: BLE001
+        return None
+    return round(total / 1000.0, 3) if total > 0 else None
+
+
 def probe(path: str | os.PathLike, ffprobe: str | None) -> ProbeInfo:
     """Probe a file and decide its kind. Raises UserError with a sentence for the user."""
     p = Path(path)
@@ -236,13 +254,21 @@ def probe(path: str | os.PathLike, ffprobe: str | None) -> ProbeInfo:
         info = info_from_image(p)
         if info is None:
             raise UserError(MSG_NOT_MEDIA)
-        if info.format == "GIF" and info.n_frames > 1:
+        if info.format in ANIMATED_IMAGES and info.n_frames > 1:
             if not ffprobe:
                 raise UserError(MSG_NO_FFMPEG)
             data = ffprobe_json(p, ffprobe)
             video = info_from_ffprobe(data, size) if data else None
-            if video is not None and video.kind == "video":
-                video.format = "gif"
+            # Only a decoder that reads every frame makes it a video; an ffmpeg without the animated WebP decoder
+            # reports a single `webp` image and the file stays a still, as before.
+            if video is not None and video.kind == "video" and video.vcodec in ANIMATED_CODECS:
+                video.format = ANIMATED_IMAGES[info.format]
+                video.nb_frames = video.nb_frames or info.n_frames
+                video.has_alpha = info.has_alpha or (video.pix_fmt or "") in ALPHA_PIX_FMTS
+                if video.duration is None:  # the WebP and APNG demuxers give no duration
+                    video.duration = animation_duration(p)
+                    if video.duration and size:
+                        video.bitrate = int(size * 8 / video.duration)
                 return video
         return info
     if not ffprobe:

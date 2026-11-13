@@ -16,6 +16,7 @@ import { toast } from '../vendor/liquid_ui/js/toast.js';
 const AUDIO_ONLY = new Set(['mp3', 'm4a', 'opus', 'flac', 'wav']);
 const UPSCALE = new Set(['2x', '4x']);
 const LOSSLESS_AUDIO = new Set(['flac', 'wav']);
+const ANIMATED = new Set(['gif', 'webp', 'apng']);
 
 const opt = (list) => list.map((x) => ({ value: String(x.id), label: x.label }));
 
@@ -41,7 +42,8 @@ export function planSummary(kind, s) {
         const c = o.video.codecs.find((x) => x.id === s.codec);
         if (c) parts.push(c.id === 'h265' ? 'HEVC' : c.label);
       }
-      if (s.codec !== 'copy' || !(fmt && fmt.codecs.length)) parts.push(limit || `Quality ${s.quality}`);
+      if (s.format === 'apng') parts.push('Lossless');
+      else if (s.codec !== 'copy' || !(fmt && fmt.codecs.length)) parts.push(limit || `Quality ${s.quality}`);
       if (s.scale !== 'none') {
         const sc = o.video.scales.find((x) => x.id === s.scale);
         parts.push(sc ? sc.label : s.scale);
@@ -346,10 +348,11 @@ export class SettingsPanel {
       this._show('upscale_method', !audioOnly && up);
       this._upscaleHint();
       this._show('quality', !audioOnly && s.format !== 'gif' ? true : !audioOnly);
-      const qOff = limit || (hasCodecs && s.codec === 'copy');
+      const qOff = limit || (hasCodecs && s.codec === 'copy') || s.format === 'apng';
       this.c.quality.setDisabled(qOff);
-      this._hint('quality', limit ? 'Set by the size limit' : hasCodecs && s.codec === 'copy' ? 'Not used when the stream is copied' : '');
+      this._hint('quality', s.format === 'apng' ? 'Animated PNG is lossless' : limit ? 'Set by the size limit' : hasCodecs && s.codec === 'copy' ? 'Not used when the stream is copied' : '');
       if (audioOnly && LOSSLESS_AUDIO.has(s.format)) this._hint('size_limit_mb', 'FLAC and WAV cannot be held to a size limit', limit);
+      else if (ANIMATED.has(s.format)) this._hint('size_limit_mb', 'Animated images cannot be held to a size limit', limit);
       else this._hint('size_limit_mb', limit ? (audioOnly ? 'The bitrate is chosen to fit' : 'Two passes; the file stays under this size') : '');
       this._show('fps', !audioOnly);
       this._hint('fps', s.format === 'gif' ? 'GIF is capped at 15 fps' : '');
