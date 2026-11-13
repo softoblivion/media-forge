@@ -99,7 +99,7 @@ class JobQueue:
         self._running: dict[str, Item] = {}
         self._cancels: dict[str, threading.Event] = {}
         self._parallel = max(1, min(3, int(workers)))
-        self._general: list[threading.Thread] = []
+        self._general: dict[int, threading.Thread] = {}  # worker index -> thread; a leaving worker drops its entry
         self._image_lane_enabled = image_lane
         self._image_thread: threading.Thread | None = None
         self._extra: list[threading.Thread] = []  # start_now threads, one per job
@@ -139,12 +139,15 @@ class JobQueue:
             self._flusher.start()
 
     def _spawn_workers(self) -> None:
-        self._general = [t for t in self._general if t.is_alive()]
-        while len(self._general) < self._parallel:
-            index = len(self._general)
+        """Start a general worker for every index in 0..parallel-1 that has none (caller holds `_lock`). A worker
+        above the limit stays in the table until it leaves, so its index is not started twice."""
+        for index in range(self._parallel):
+            current = self._general.get(index)
+            if current is not None and current.is_alive():
+                continue
             thread = threading.Thread(target=self._worker, args=(GENERAL_LANE, index), daemon=True,
                                       name=f"jobs-{index + 1}")
-            self._general.append(thread)
+            self._general[index] = thread
             thread.start()
         if self._image_lane_enabled and (self._image_thread is None or not self._image_thread.is_alive()):
             self._image_thread = threading.Thread(target=self._worker, args=(IMAGE_LANE, 0), daemon=True,
@@ -164,7 +167,8 @@ class JobQueue:
             for event in self._cancels.values():
                 event.set()
             self._cv.notify_all()
-            threads = list(self._general) + ([self._image_thread] if self._image_thread else []) + list(self._extra)
+            threads = (list(self._general.values()) + ([self._image_thread] if self._image_thread else [])
+                       + list(self._extra))
         deadline = time.monotonic() + timeout
         for thread in threads:
             thread.join(max(0.0, deadline - time.monotonic()))
@@ -378,6 +382,8 @@ class JobQueue:
                     if self._stopping:
                         return
                     if lane == GENERAL_LANE and index >= self._parallel:
+                        if self._general.get(index) is threading.current_thread():
+                            del self._general[index]  # in the same critical section as the decision to leave
                         return
                     item_id = self._pick(lane)
                     if item_id is not None:

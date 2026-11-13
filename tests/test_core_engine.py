@@ -378,6 +378,52 @@ class QueueTest(unittest.TestCase):
                          [{"done": 0, "failed": 1, "cancelled": 0}, {"done": 0, "failed": 0, "cancelled": 1}])
         q.stop()
 
+    def test_parallel_lowered_then_raised_while_old_worker_busy(self):
+        """3 -> 1 -> 2 while the third worker still runs its last job: two workers serve the queue afterwards."""
+        gates = {name: threading.Event() for name in ("a", "b", "c")}
+        running = set()
+        peak = [0]
+        lock = threading.Lock()
+
+        def runner(item, ctx):
+            with lock:
+                running.add(item.id)
+                peak[0] = max(peak[0], len(running))
+            try:
+                if item.id in gates:
+                    if not gates[item.id].wait(5):
+                        raise RuntimeError("gate timeout")
+                else:
+                    time.sleep(0.3)
+            finally:
+                with lock:
+                    running.discard(item.id)
+            return {}
+
+        q = JobQueue(lambda n, p: None, runner, workers=3, image_lane=False)
+        q.start()
+        for name in ("a", "b", "c"):
+            q.add(Item(id=name, path=name, name=name, kind="video", size=1, settings={}, status="ready"))
+        q.start_items(None)
+        self.assertTrue(wait_for(lambda: len(running) == 3, 5))
+        q.set_parallel(1)
+        gates["b"].set()  # the second worker ends its job and leaves (index 1 >= 1)
+        self.assertTrue(wait_for(lambda: q.get("b").status == "done", 5))
+        time.sleep(0.2)
+        q.set_parallel(2)  # the third worker is still busy with c and will leave after it
+        gates["c"].set()
+        self.assertTrue(wait_for(lambda: q.get("c").status == "done", 5))
+        time.sleep(0.2)
+        with lock:
+            peak[0] = 0
+        for n in range(4):
+            q.add(Item(id=f"x{n}", path=f"x{n}", name=f"x{n}", kind="video", size=1, settings={}, status="ready"))
+        q.start_items([f"x{n}" for n in range(4)])
+        gates["a"].set()
+        self.assertTrue(q.wait_idle(10))
+        self.assertEqual(peak[0], 2)  # parallel_jobs = 2 holds
+        q.stop()
+
 
 if __name__ == "__main__":
     unittest.main()
