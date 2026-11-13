@@ -389,6 +389,8 @@ class Bridge:
         self._last_dir = ""
         self._auto_download_for: Optional[str] = None
         self._scale_applier: Optional[Callable[[int], None]] = None
+        self._drag_starter: Optional[Callable[[str], bool]] = None
+        self._scales: Optional[list[int]] = None  # the Scale steps whose minimum window fits; None = not known yet
         self._shut_down = False
 
     # -- wiring (underscore names are not exposed to JS)
@@ -405,6 +407,11 @@ class Bridge:
     def _attach_scale(self, applier: Callable[[int], None]) -> None:
         """The shell's function that applies a Scale percentage to the window (zoom factor and window size)."""
         self._scale_applier = applier
+
+    def _attach_drag(self, starter: Callable[[str], bool]) -> None:
+        """The shell's function that starts the system's move or top-edge resize (`window_drag_start`); it returns
+        whether the system took the drag over."""
+        self._drag_starter = starter
 
     def _emit(self, name: str, payload: Any) -> None:
         if name == "batch_done":
@@ -440,7 +447,34 @@ class Bridge:
             if focused == self._focused:
                 return
             self._focused = focused
-        self._emit("window", {"focused": focused})
+        self._emit("window", self._window_state())
+
+    def _on_window_scales(self, scales: list[int]) -> None:
+        """The Scale steps that fit the window's monitor now (at start, after a move to another monitor, after a
+        change of the displays); the page dims the others."""
+        scales = sorted({int(s) for s in scales})
+        with self._lock:
+            if scales == self._scales:
+                return
+            self._scales = scales
+        self._emit("window", self._window_state())
+
+    def _window_state(self) -> dict:
+        with self._lock:
+            state: dict[str, Any] = {"focused": self._focused}
+            if self._drag_starter is not None:
+                state["drag"] = True  # the page hands title-bar and top-edge presses to window_drag_start
+            if self._scales is not None:
+                state["scales"] = list(self._scales)
+        return state
+
+    def _save_window_bounds(self, bounds: dict) -> None:
+        """Store the window's position and logical size (`window_bounds`, BRIDGE_API.md 3.5) when they changed."""
+        try:
+            if bounds != self._setting("window_bounds"):
+                self._engine.set_settings({"window_bounds": bounds})
+        except Exception:  # noqa: BLE001 - the window still works; the next start opens at the default size
+            log.warning("could not save the window bounds", exc_info=True)
 
     # -- drop listener (main registers it on window.dom.document.events.drop)
     def _on_drop(self, event: Any) -> None:
@@ -481,7 +515,7 @@ class Bridge:
         state = dict(self._engine.state() or {})
         state["version"] = self._version
         state["update"] = self._update_status()
-        state["window"] = {"focused": self._focused}
+        state["window"] = self._window_state()
         return state
 
     # -- dialogs
@@ -670,6 +704,7 @@ class Bridge:
     def set_settings(self, patch):
         if not isinstance(patch, dict):
             raise BridgeError("Invalid settings.")
+        patch = {k: v for k, v in patch.items() if k != "window_bounds"}  # written by the shell only (3.5)
         before = self._engine.get_settings() or {}
         try:
             after = self._engine.set_settings(patch)
@@ -692,7 +727,12 @@ class Bridge:
 
     @_api
     def set_scale(self, value):
-        """The Scale setting (BRIDGE_API 3.5 `ui_scale`): saves the step and applies it to the window at once."""
+        """The Scale setting (BRIDGE_API 3.5 `ui_scale`): saves the step and applies it to the window at once. A step
+        whose minimum window does not fit the monitor's work area is refused."""
+        with self._lock:
+            scales = list(self._scales) if self._scales else None
+        if scales is not None and isinstance(value, int) and not isinstance(value, bool) and value > max(scales):
+            raise BridgeError(f"Scale {value} % does not fit this screen.")
         after = self.set_settings({"ui_scale": value})
         if self._scale_applier is not None:
             try:
@@ -745,6 +785,18 @@ class Bridge:
         return None
 
     @_api
+    def window_drag_start(self, part):
+        """Hand a mouse press on the page to the system: "move" (the title bar) starts the system's move of the
+        window, an edge of DRAG_PARTS its resize from the top edge or a top corner (the page's grip strip; the other
+        edges are the window's own sizing border). Returns whether the system took the drag over."""
+        if part not in DRAG_PARTS:
+            raise BridgeError("Unknown window part.")
+        self._need_window()
+        if self._drag_starter is None:
+            return False
+        return bool(self._drag_starter(part))
+
+    @_api
     def update_status(self):
         return self._update_status()
 
@@ -792,5 +844,6 @@ CONTRACT_METHODS = (
     "ready", "add_files", "pick_files", "remove_item", "clear", "set_item_settings", "apply_to_kind", "start",
     "start_now", "cancel", "cancel_all", "get_settings", "set_settings", "pick_output_dir", "reveal", "open_path",
     "open_url", "capabilities", "window_minimize", "window_close", "update_status", "check_updates",
-    "download_update", "apply_update", "log", "set_scale",
+    "download_update", "apply_update", "log", "set_scale", "window_drag_start",
 )
+DRAG_PARTS = ("move", "top", "top-left", "top-right")

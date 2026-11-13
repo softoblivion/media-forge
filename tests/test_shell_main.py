@@ -22,8 +22,8 @@ class MainHelpersTest(unittest.TestCase):
         self.assertEqual(main.MUTEX_NAME, "Local\\MediaForge.SingleInstance")
         self.assertEqual(main.BACKGROUND, "#04070f")
         self.assertEqual(main.START_SIZE, (630, 840))
-        self.assertEqual(main.SIZE_LADDER[-1], (480, 640))   # the smallest step, used at 150 % and above
-        self.assertFalse(hasattr(main, "MIN_SIZE") or hasattr(main, "TOP_GRIP"))
+        self.assertEqual(main.SIZE_LADDER[-1], (480, 640))
+        self.assertEqual(main.MIN_SIZE, (480, 640))          # the smallest designed size is the minimum window
         self.assertEqual(main.HTTP_PORT_FIRST, 42101)
 
     def test_parse_args(self):
@@ -101,6 +101,140 @@ class MainHelpersTest(unittest.TestCase):
         module = main.load_fake_module()
         engine = module.FakeEngine(lambda *_: None, "0.1.0")
         self.assertIn("items", engine.state())
+
+
+class WindowSettingsTest(unittest.TestCase):
+    PRIMARY = ((0, 0, 1920, 1032), 1.0, True)
+    SECOND = ((1920, 0, 4480, 1400), 1.5, False)
+
+    def test_window_settings_read_safely(self):
+        class Engine:
+            def __init__(self, data):
+                self.data = data
+
+            def get_settings(self):
+                if isinstance(self.data, Exception):
+                    raise self.data
+                return self.data
+
+        bounds = {"x": 1, "y": 2, "width": 630, "height": 840}
+        self.assertEqual(main.window_settings(Engine({"ui_scale": 150, "window_bounds": bounds})), (150, bounds))
+        self.assertEqual(main.window_settings(Engine({"ui_scale": "x", "window_bounds": {"x": 1}})), (100, None))
+        self.assertEqual(main.window_settings(Engine(RuntimeError("down"))), (100, None))
+
+    def test_initial_args_without_bounds_are_the_start_size(self):
+        self.assertEqual(main.initial_window_args(100, None, [self.PRIMARY]), {"width": 630, "height": 840})
+        self.assertEqual(main.initial_window_args(100, {"x": 0, "y": 0, "width": 630, "height": 840}, []),
+                         {"width": 630, "height": 840})
+
+    def test_initial_args_restore_in_logical_px_of_the_primary_monitor(self):
+        bounds = {"x": 300, "y": 80, "width": 700, "height": 900}
+        self.assertEqual(main.initial_window_args(100, bounds, [self.PRIMARY]),
+                         {"x": 300, "y": 80, "width": 700, "height": 900})
+        self.assertEqual(main.initial_window_args(125, bounds, [self.PRIMARY]),
+                         {"x": 300, "y": 0, "width": 875, "height": 1032})
+        hidpi = ((0, 0, 2880, 1560), 1.5, True)
+        self.assertEqual(main.initial_window_args(100, bounds, [hidpi]),
+                         {"x": 200, "y": 53, "width": 700, "height": 900})
+
+    def test_initial_args_on_a_missing_monitor_are_centred_on_the_primary(self):
+        bounds = {"x": 2200, "y": 100, "width": 630, "height": 840}
+        self.assertEqual(main.initial_window_args(100, bounds, [self.PRIMARY]),
+                         {"x": 645, "y": 96, "width": 630, "height": 840})
+        self.assertEqual(main.initial_window_args(100, bounds, [self.PRIMARY, self.SECOND]),
+                         {"x": 2200, "y": 100, "width": 945, "height": 1260})
+
+
+class FakeHook:
+    """The part of winutil.WindowHook that WindowGeometry uses, on a 1920 x 1032 work area at 96 dpi."""
+
+    def __init__(self, rect=(600, 100, 630, 840)):
+        self.rect = rect
+        self.zoom = 1.0
+        self.minimized = False
+        self.minimum = main.MIN_SIZE
+
+    def client_rect(self):
+        return self.rect
+
+    def scale(self):
+        return 1.0
+
+    def work_area(self):
+        return (0, 0, 1920, 1032)
+
+    def min_client(self, zoom=None):
+        z = self.zoom if zoom is None else zoom
+        return round(self.minimum[0] * z), round(self.minimum[1] * z)
+
+    def is_minimized(self):
+        return self.minimized
+
+    def place(self, rect, apply=None):
+        self.rect = tuple(rect)
+        if apply is not None:
+            apply(*rect)
+        return rect
+
+
+class FakeBridge:
+    def __init__(self):
+        self.scales: list = []
+        self.saved: list = []
+
+    def _on_window_scales(self, scales):
+        self.scales.append(list(scales))
+
+    def _save_window_bounds(self, bounds):
+        self.saved.append(bounds)
+
+
+class WindowGeometryTest(unittest.TestCase):
+    def setUp(self):
+        self.control = type("Control", (), {"ZoomFactor": 1.0})()
+        self.bounds_calls: list = []
+        native = type("Native", (), {})()
+        native.webview = self.control
+        native.SetBounds = lambda *b: self.bounds_calls.append(b)
+        self.window = type("Window", (), {"native": native})()
+        self.hook = FakeHook()
+        self.bridge = FakeBridge()
+        self.geometry = main.WindowGeometry(self.window, self.hook, self.bridge, (100, 125, 150, 175, 200))
+
+    def test_first_start_is_the_ladder_size_centred(self):
+        with mock.patch("media_forge.shell.winutil.monitors", return_value=[]):
+            self.assertEqual(self.geometry.start(100, None), (645, 96, 630, 840))
+        self.assertEqual(self.bridge.scales, [[100, 125, 150]])
+        self.assertEqual(self.bounds_calls, [(645, 96, 630, 840)])
+
+    def test_start_restores_the_bounds_at_the_scale_step(self):
+        monitors = [((0, 0, 1920, 1032), 1.0, True)]
+        with mock.patch("media_forge.shell.winutil.monitors", return_value=monitors):
+            self.geometry.start(125, {"x": 300, "y": 10, "width": 640, "height": 800})
+        self.assertEqual(self.hook.rect, (300, 10, 800, 1000))
+        self.assertEqual(self.control.ZoomFactor, 1.25)
+        self.assertEqual(self.hook.zoom, 1.25)
+
+    def test_scale_change_keeps_centre_and_proportions_and_saves(self):
+        self.hook.rect = (700, 150, 600, 800)
+        self.geometry.percent = 125
+        self.hook.zoom = 1.25
+        self.geometry.set_scale(100)
+        self.assertEqual(self.hook.rect, (760, 230, 480, 640))
+        self.assertEqual(self.control.ZoomFactor, 1.0)
+        self.assertEqual(self.bridge.saved[-1], {"x": 760, "y": 230, "width": 480, "height": 640})
+        self.geometry.set_scale(150)
+        self.assertEqual(self.hook.rect, (640, 70, 720, 960))
+        self.assertEqual(self.bridge.saved[-1], {"x": 640, "y": 70, "width": 480, "height": 640})  # same logical size
+
+    def test_scale_change_while_minimized_only_zooms(self):
+        self.hook.minimized = True
+        self.geometry.set_scale(150)
+        self.assertEqual(self.control.ZoomFactor, 1.5)
+        self.assertEqual(self.hook.rect, (600, 100, 630, 840))
+        self.assertEqual(self.bridge.saved, [])
+        self.geometry.save()
+        self.assertEqual(self.bridge.saved, [])   # a minimized window keeps its stored bounds
 
 
 if __name__ == "__main__":

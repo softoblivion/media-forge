@@ -1,4 +1,4 @@
-"""Application entry point: single instance, logging, engine, bridge and the fixed-size frameless 3:4 window.
+"""Application entry point: single instance, logging, engine, bridge and the resizable frameless window.
 
     python -m media_forge.shell.main [--debug] [--fake] [--ui-dir PATH] [FILE_OR_FOLDER ...]
 
@@ -26,10 +26,12 @@ from media_forge.core.selfupdate import APPLY_FLAG, build_scheduler, build_updat
 WINDOW_TITLE = "Media Forge"
 MUTEX_NAME = "Local\\MediaForge.SingleInstance"
 BACKGROUND = "#04070f"
-# Window = page viewport, logical pixels, 3:4, not resizable (ARCHITECTURE.md 7). The first size whose size times
-# the Scale setting fits the monitor work area is used; the two smallest steps exist for the larger scales.
+# Window = page viewport, logical pixels (ARCHITECTURE.md 7). It is resizable down to MIN_SIZE, the smallest size the
+# layout is designed for; its size and position are kept in the setting `window_bounds`. Without stored bounds it
+# opens at the first ladder size whose size times the Scale setting fits the monitor work area.
 SIZE_LADDER = ((630, 840), (600, 800), (570, 760), (540, 720), (510, 680), (480, 640))
 START_SIZE = SIZE_LADDER[0]
+MIN_SIZE = SIZE_LADDER[-1]
 HTTP_PORT_FIRST = 42101  # fixed port range keeps the page origin (and its localStorage) stable between launches
 HTTP_PORT_TRIES = 40
 LOG_NAME = "app.log"
@@ -234,14 +236,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     except Exception:  # noqa: BLE001 - the app works without updates
         log.exception("the updater could not be created")
 
+    # Before any window exists (pywebview's own SetProcessDPIAware then fails harmlessly): a move to a monitor of
+    # another DPI keeps the logical size and a sharp page (WindowHook, WM_DPICHANGED).
+    if not winutil.set_per_monitor_dpi_awareness():
+        log.info("per-monitor DPI awareness is not available")
+    percent, bounds = window_settings(engine)
     import webview  # imported late: pulls in pythonnet and WinForms
 
     window = webview.create_window(
         WINDOW_TITLE,
         url=str(index),
         js_api=bridge,
-        width=START_SIZE[0],
-        height=START_SIZE[1],
+        **initial_window_args(percent, bounds, winutil.monitors()),
         frameless=True,
         easy_drag=False,
         resizable=False,
@@ -276,12 +282,16 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 
 def _wire_window_events(window: Any, bridge: Any, engine: Any) -> None:
-    state = {"drop_wired": False, "native_done": False}
+    state: dict[str, Any] = {"drop_wired": False, "native_done": False, "geometry": None}
 
     def on_shown() -> None:
         if not state["native_done"]:
             state["native_done"] = True
-            _on_ui_thread(window, lambda: _setup_native_window(window, bridge))
+
+            def setup() -> None:
+                state["geometry"] = _setup_native_window(window, bridge)
+
+            _on_ui_thread(window, setup)
             threading.Thread(target=bridge._start_updates, name="update-startup", daemon=True).start()
 
     def on_loaded() -> None:
@@ -296,6 +306,9 @@ def _wire_window_events(window: Any, bridge: Any, engine: Any) -> None:
             log.warning("drag and drop is not available", exc_info=True)
 
     def on_closing() -> None:
+        geometry = state["geometry"]
+        if geometry is not None:
+            geometry.save()  # a move outside a move loop (Win+Shift+Arrow, snapping) ends none: the last position
         bridge._shutdown()
 
     window.events.shown += on_shown
@@ -317,54 +330,161 @@ def _on_ui_thread(window: Any, fn) -> None:
     fn()
 
 
-class WindowScale:
-    """The Scale setting applied to the window: the WebView2 zoom factor plus the locked window size (logical
-    size times the factor; the page keeps its logical layout). `apply` runs on the UI thread."""
+def _ui_result(window: Any, fn) -> Any:
+    """`fn()` run on the UI thread (synchronously), its result returned; None when it did not run."""
+    result: list[Any] = []
+    _on_ui_thread(window, lambda: result.append(fn()))
+    return result[0] if result else None
 
-    def __init__(self, window: Any, hook: Any, ladder) -> None:
+
+def window_settings(engine: Any) -> tuple[int, Optional[dict]]:
+    """(Scale percent, stored window bounds or None) from the engine's settings."""
+    try:
+        settings = engine.get_settings() or {}
+    except Exception:  # noqa: BLE001
+        settings = {}
+    try:
+        percent = int(settings.get("ui_scale", 100))
+    except (TypeError, ValueError):
+        percent = 100
+    bounds = settings.get("window_bounds")
+    keys = ("x", "y", "width", "height")
+    if not (isinstance(bounds, dict) and all(isinstance(bounds.get(k), int) for k in keys)):
+        bounds = None
+    return max(1, percent), bounds
+
+
+def initial_window_args(percent: int, bounds: Optional[dict], monitors) -> dict[str, int]:
+    """Size and position for `webview.create_window`: logical px that pywebview multiplies by the DPI scale of the
+    new window, which opens on the primary monitor. The stored bounds (restored onto a connected monitor) when there
+    are any, else the start size centred by WinForms. The shown window is placed exactly by `WindowGeometry.start`;
+    these values only keep it from opening elsewhere first."""
+    from . import winutil
+
+    placed = winutil.restored_rect(bounds, monitors, percent / 100.0, MIN_SIZE) if bounds else None
+    if placed is None:
+        return {"width": START_SIZE[0], "height": START_SIZE[1]}
+    (x, y, w, h), _dpi_scale = placed
+    primary = next((m[1] for m in monitors if m[2]), monitors[0][1]) or 1.0
+    return {"x": int(round(x / primary)), "y": int(round(y / primary)),
+            "width": int(round(w / primary)), "height": int(round(h / primary))}
+
+
+class WindowGeometry:
+    """Size, position and Scale of the window (ARCHITECTURE.md 7): the WebView2 zoom factor plus a client size of
+    logical size x zoom x DPI (the page keeps its logical layout), the stored bounds, the Scale steps that fit.
+    Runs on the UI thread, except `save`, which only reads the window."""
+
+    def __init__(self, window: Any, hook: Any, bridge: Any, steps) -> None:
         self._window = window
         self._hook = hook
-        self._ladder = ladder
+        self._bridge = bridge
+        self._steps = tuple(steps)
         self.percent = 100
 
-    def apply(self, percent: int, keep_position: bool = False) -> None:
+    def _apply(self, x: int, y: int, w: int, h: int) -> None:
+        self._window.native.SetBounds(x, y, w, h)
+
+    def start(self, percent: int, bounds: Optional[dict]) -> tuple[int, int, int, int]:
+        """The saved Scale and bounds (or the start size, centred) applied before the page shows anything."""
         from . import winutil
 
-        zoom = max(1, int(percent)) / 100.0
-        self.percent = int(percent)
+        hook = self._hook
+        self.percent = max(1, int(percent))
+        zoom = self.percent / 100.0
+        hook.zoom = zoom
         winutil.set_zoom_factor(self._window, zoom)
-        width, height = self._hook.fit_size(self._ladder, zoom)
-        rect = self._hook.lock(width, height, apply=self._window.native.SetBounds, zoom=zoom,
-                               keep_position=keep_position)
-        log.info("window %sx%s logical at %s%%, %sx%s physical, dpi scale %.2f", width, height, self.percent,
-                 rect[2], rect[3], winutil.window_scale(self._hook.hwnd))
+        rect = None
+        if bounds:
+            placed = winutil.restored_rect(bounds, winutil.monitors(), zoom, MIN_SIZE)
+            if placed is not None:
+                rect, dpi_scale = placed
+                if abs(dpi_scale - hook.scale()) > 1e-3:
+                    # Onto a monitor of another DPI: move first (WM_DPICHANGED rescales the window there), then
+                    # size it at that monitor's DPI.
+                    current = hook.client_rect() or rect
+                    hook.place(rect[:2] + current[2:], self._apply)
+                    placed = winutil.restored_rect(bounds, winutil.monitors(), zoom, MIN_SIZE)
+                    rect = placed[0] if placed is not None else rect
+        if rect is None:
+            work = hook.work_area()
+            dpi_scale = hook.scale()
+            work_logical = None
+            if work is not None:
+                work_logical = (int((work[2] - work[0]) / dpi_scale), int((work[3] - work[1]) / dpi_scale))
+            size = winutil.pick_window_size(SIZE_LADDER, work_logical, zoom)
+            rect = winutil.clamp_rect(winutil.centered_rect(winutil.scaled_size(size, zoom * dpi_scale), work),
+                                      work, hook.min_client())
+        hook.place(rect, self._apply)
+        self.publish_scales()
+        placed_rect = hook.client_rect() or rect
+        log.info("window %s at %s%% (client x, y, w, h), dpi scale %.2f", placed_rect, self.percent, hook.scale())
+        return placed_rect
+
+    def set_scale(self, percent: int) -> None:
+        """A new Scale step: the window size times the ratio of the steps around the same centre, clamped into
+        the work area, never below the minimum at the new step."""
+        from . import winutil
+
+        hook = self._hook
+        new_percent = max(1, int(percent))
+        old_zoom, zoom = self.percent / 100.0, new_percent / 100.0
+        self.percent = new_percent
+        hook.zoom = zoom
+        winutil.set_zoom_factor(self._window, zoom)
+        current = hook.client_rect()
+        if current is None or hook.is_minimized():
+            return
+        rect = winutil.rescaled_rect(current, zoom / old_zoom, hook.work_area(), hook.min_client(zoom))
+        hook.place(rect, self._apply)
+        log.info("window %s at %s%%", hook.client_rect(), self.percent)
+        self.save()
+
+    def fitting_scales(self) -> list[int]:
+        from . import winutil
+
+        return winutil.fitting_scales(self._steps, MIN_SIZE, self._hook.scale(), self._hook.work_area())
+
+    def publish_scales(self) -> None:
+        self._bridge._on_window_scales(self.fitting_scales())
+
+    def save(self) -> None:
+        """Store the bounds (`window_bounds`) of the restored window."""
+        from . import winutil
+
+        hook = self._hook
+        rect = hook.client_rect()
+        if rect is None or hook.is_minimized() or rect[2] <= 0 or rect[3] <= 0:
+            return
+        self._bridge._save_window_bounds(winutil.bounds_of(rect, hook.zoom, hook.scale()))
 
 
-def _setup_native_window(window: Any, bridge: Any) -> None:
-    """On the UI thread after the form is shown: fixed size fitted to the work area at the saved Scale, no
-    maximize, DWM corners and border colour, focus tracking. The zoom is set before the page shows anything (the
-    page waits for the bridge)."""
+def _setup_native_window(window: Any, bridge: Any) -> Optional[WindowGeometry]:
+    """On the UI thread after the form is shown: the resize hook, the saved Scale and bounds, DWM corners and border
+    colour, focus tracking. The zoom is set before the page shows anything (the page waits for the bridge)."""
+    from media_forge.core.settings import SCALE_STEPS
+
     from . import winutil
 
     native = window.native
     if native is None:
-        return
+        return None
+    geometry = None
     try:
         hwnd = int(native.Handle.ToInt64())
         winutil.set_rounded_corners(hwnd)
         winutil.set_border_color(hwnd, BACKGROUND)
-        hook = winutil.FixedSizeHook(hwnd)
+        hook = winutil.WindowHook(hwnd, MIN_SIZE)
         if hook.install():
             _keep_alive.append(hook)  # the ctypes callback must outlive the window
-            scale = WindowScale(window, hook, SIZE_LADDER)
-            try:
-                percent = int((bridge._engine.get_settings() or {}).get("ui_scale", 100))
-            except Exception:  # noqa: BLE001
-                percent = 100
-            scale.apply(percent)
-            bridge._attach_scale(lambda value: _on_ui_thread(window, lambda: scale.apply(value, keep_position=True)))
+            geometry = WindowGeometry(window, hook, bridge, SCALE_STEPS)
+            bridge._attach_scale(lambda value: _on_ui_thread(window, lambda: geometry.set_scale(value)))
+            bridge._attach_drag(lambda part: _ui_result(window, lambda: hook.begin_drag(part)))
+            geometry.start(*window_settings(bridge._engine))  # its `window` event carries `drag` and `scales`
+            hook.on_size_end = geometry.save
+            hook.on_display = geometry.publish_scales
         else:
-            log.warning("fixed-size hook was not installed")
+            log.warning("window hook was not installed")
     except Exception:  # noqa: BLE001
         log.exception("DWM / window size setup failed")
     try:
@@ -372,6 +492,7 @@ def _setup_native_window(window: Any, bridge: Any) -> None:
         native.Deactivate += lambda *_: bridge._on_focus(False)
     except Exception:  # noqa: BLE001
         log.exception("focus tracking unavailable")
+    return geometry
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ SETTINGS = {
     "output_mode": "beside", "output_dir": "", "suffix": "_forge", "keep_file_dates": True, "parallel_jobs": 1,
     "open_when_done": False,
     "sound_when_done": True, "auto_download_updates": True, "skipped_major": None, "theme": "nova", "ui_scale": 100,
+    "window_bounds": None,
 }
 
 MSG_BUSY = "The file is being processed."

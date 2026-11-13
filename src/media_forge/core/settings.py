@@ -46,7 +46,26 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "skipped_major": None,   # the new major version the user chose to stay away from (kit 10.2), or None
     "theme": "nova",
     "ui_scale": DEFAULT_SCALE,
+    "window_bounds": None,   # the window's last position (physical px) and size (logical px), or None
 }
+_BOUNDS_LIMITS = {"x": (-1_000_000, 1_000_000), "y": (-1_000_000, 1_000_000), "width": (1, 100_000),
+                  "height": (1, 100_000)}
+
+
+def normalize_window_bounds(value: Any) -> dict[str, int] | None:
+    """`window_bounds`: {"x", "y", "width", "height"} of whole numbers in range (integral floats are accepted),
+    else None (the window then opens at its default size, centred)."""
+    if not isinstance(value, Mapping):
+        return None
+    result: dict[str, int] = {}
+    for key, (low, high) in _BOUNDS_LIMITS.items():
+        number = value.get(key)
+        if isinstance(number, float) and number.is_integer():
+            number = int(number)
+        if isinstance(number, bool) or not isinstance(number, int) or not low <= number <= high:
+            return None
+        result[key] = number
+    return result
 
 
 def normalize_scale(value: Any) -> int:
@@ -124,6 +143,8 @@ def validate(current: Mapping[str, Any], patch: Mapping[str, Any],
             new[key] = normalize_scale(value)
         elif key == "skipped_major":
             new[key] = normalize_major(value)
+        elif key == "window_bounds":
+            new[key] = normalize_window_bounds(value)
         else:  # booleans
             new[key] = value if isinstance(value, bool) else bool(current.get(key, GLOBAL_DEFAULTS[key]))
     if new["output_mode"] == "folder" and check_folder and ("output_mode" in patch or "output_dir" in patch):

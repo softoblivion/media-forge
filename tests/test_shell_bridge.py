@@ -124,7 +124,7 @@ class ContractSurfaceTest(unittest.TestCase):
     def test_public_names_are_exactly_the_contract(self):
         public = sorted(n for n in dir(Bridge) if not n.startswith("_"))
         self.assertEqual(public, sorted(CONTRACT_METHODS))
-        self.assertEqual(len(CONTRACT_METHODS), 26)
+        self.assertEqual(len(CONTRACT_METHODS), 27)
 
     def test_parameter_names_visible_to_pywebview(self):
         expected = {
@@ -133,7 +133,8 @@ class ContractSurfaceTest(unittest.TestCase):
             "cancel": ["id"], "cancel_all": [], "get_settings": [], "set_settings": ["patch"], "pick_output_dir": [],
             "reveal": ["path"], "open_path": ["path"], "open_url": ["url"], "capabilities": [], "window_minimize": [],
             "window_close": [], "update_status": [], "check_updates": [], "download_update": [],
-            "apply_update": [], "log": ["level", "message"],
+            "apply_update": [], "log": ["level", "message"], "set_scale": ["value"],
+            "window_drag_start": ["part"],
         }
         for name, params in expected.items():
             spec = inspect.getfullargspec(getattr(Bridge, name))
@@ -392,6 +393,63 @@ class WindowTest(BridgeTestBase):
         self.bridge._on_focus(True)
         self.assertEqual([p for _, p in self.events("window")], [{"focused": False}, {"focused": True}])
         self.assertEqual(self.bridge.ready()["window"], {"focused": True})
+
+    def test_fitting_scales_are_published_once_per_change(self):
+        self.bridge._on_window_scales([150, 100, 125])
+        self.bridge._on_window_scales([100, 125, 150])
+        self.bridge._on_focus(False)
+        self.bridge._on_window_scales([100])
+        self.assertEqual([p for _, p in self.events("window")], [
+            {"focused": True, "scales": [100, 125, 150]},
+            {"focused": False, "scales": [100, 125, 150]},
+            {"focused": False, "scales": [100]},
+        ])
+        self.assertEqual(self.bridge.ready()["window"], {"focused": False, "scales": [100]})
+
+    def test_set_scale_saves_applies_and_refuses_a_step_that_does_not_fit(self):
+        applied: list[int] = []
+        self.bridge._attach_scale(applied.append)
+        self.assertEqual(self.bridge.set_scale(175)["ui_scale"], 175)   # no fitting steps known yet: allowed
+        self.bridge._on_window_scales([100, 125, 150])
+        self.assertEqual(self.bridge.set_scale(125)["ui_scale"], 125)
+        with self.assertRaises(BridgeError):
+            self.bridge.set_scale(175)
+        self.assertEqual(applied, [175, 125])
+        self.assertEqual(self.bridge.get_settings()["ui_scale"], 125)
+
+    def test_drag_start_for_the_title_bar_and_the_top_edges_only(self):
+        started: list[str] = []
+
+        def starter(part):
+            started.append(part)
+            return part != "top-right"  # the system did not take this one over (the button was already up)
+
+        self.assertFalse(self.bridge.window_drag_start("move"))       # no window hook: nothing to start
+        self.assertNotIn("drag", self.bridge.ready()["window"])
+        self.bridge._attach_drag(starter)
+        self.assertTrue(self.bridge.ready()["window"]["drag"])
+        self.assertEqual([self.bridge.window_drag_start(p) for p in ("move", "top", "top-left", "top-right")],
+                         [True, True, True, False])
+        for bad in ("left", "bottom", "", None, 3):
+            with self.assertRaises(BridgeError):
+                self.bridge.window_drag_start(bad)
+        self.assertEqual(started, ["move", "top", "top-left", "top-right"])
+
+    def test_window_bounds_are_saved_only_when_changed(self):
+        bounds = {"x": 10, "y": 20, "width": 630, "height": 840}
+        self.bridge._save_window_bounds(bounds)
+        self.bridge._save_window_bounds(dict(bounds))
+        self.assertEqual(self.bridge.get_settings()["window_bounds"], bounds)
+        saves = [args[0] for c, args in self.engine.calls if c == "set_settings" and "window_bounds" in args[0]]
+        self.assertEqual(saves, [{"window_bounds": bounds}])
+
+    def test_window_bounds_are_not_settable_from_the_page(self):
+        bounds = {"x": 10, "y": 20, "width": 630, "height": 840}
+        self.bridge._save_window_bounds(bounds)
+        after = self.bridge.set_settings({"window_bounds": {"x": 0, "y": 0, "width": 9000, "height": 9000},
+                                          "suffix": "_small"})
+        self.assertEqual(after["window_bounds"], bounds)
+        self.assertEqual(after["suffix"], "_small")
 
     def test_shutdown_stops_everything_once(self):
         scheduler = FakeScheduler()

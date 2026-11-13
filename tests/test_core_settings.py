@@ -181,6 +181,25 @@ class SettingsTest(ScratchCase):
         s.paths.settings_file.write_text(json.dumps({"ui_scale": 160}), encoding="utf-8")
         self.assertEqual(s.load()["ui_scale"], 150)
 
+    def test_window_bounds(self):
+        s = self.fresh("bounds")
+        self.assertIsNone(s.load()["window_bounds"])  # absent from older files: the default size, centred
+        bounds = {"x": -1500, "y": 40, "width": 700, "height": 900}
+        self.assertEqual(s.patch({"window_bounds": bounds})["window_bounds"], bounds)
+        self.assertEqual(Settings(s.paths).load()["window_bounds"], bounds)  # survives a restart
+        self.assertEqual(s.patch({"window_bounds": {"x": 1.0, "y": 2.0, "width": 630.0, "height": 840.0}})
+                         ["window_bounds"], {"x": 1, "y": 2, "width": 630, "height": 840})
+        junk_values = ("big", 5, [1, 2, 3, 4], {"x": 1, "y": 2, "width": 630}, {"x": True, "y": 2, "width": 3,
+                       "height": 4}, {"x": 1, "y": 2, "width": 0, "height": 840},
+                       {"x": 1, "y": 2, "width": 630.5, "height": 840}, {"x": 10**7, "y": 2, "width": 6, "height": 8})
+        for junk in junk_values:
+            with self.subTest(junk=junk):
+                self.assertIsNone(s.patch({"window_bounds": junk})["window_bounds"])
+        s.paths.settings_file.write_text(json.dumps({"window_bounds": "junk", "suffix": "_y"}), encoding="utf-8")
+        data = s.load()
+        self.assertIsNone(data["window_bounds"])
+        self.assertEqual(data["suffix"], "_y")  # a bad value never discards the other keys
+
     def test_theme(self):
         s = self.fresh("theme")
         self.assertEqual(s.load()["theme"], "nova")
