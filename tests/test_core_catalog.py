@@ -132,6 +132,22 @@ class NormalizeTest(unittest.TestCase):
                     self.assertTrue(isinstance(f.get("title", ""), str))
                     self.assertNotEqual(f.get("title"), "")
 
+    def test_audio_only_outputs_are_named_by_their_format_alone(self):
+        # The UI shows them in a row labelled "Audio only", with the same names as the audio kind's formats.
+        opts = catalog.options(CAPS_GPU)
+        video = {f["id"]: f["label"] for f in opts["video"]["formats"]}
+        audio = {f["id"]: f["label"] for f in opts["audio"]["formats"]}
+        self.assertEqual({i: video[i] for i in catalog.AUDIO_ONLY_VIDEO_FORMATS},
+                         {i: audio[i] for i in catalog.AUDIO_ONLY_VIDEO_FORMATS})
+        for fid, label in video.items():
+            self.assertNotIn("audio", label.lower(), fid)
+
+    def test_the_ui_splits_the_video_formats_as_the_core_does(self):
+        panels = (Path(catalog.__file__).parents[1] / "ui" / "js" / "panels.js").read_text(encoding="utf-8")
+        line = next(t for t in panels.splitlines() if t.startswith("const AUDIO_ONLY = new Set("))
+        ids = tuple(part.strip(" '") for part in line.split("[", 1)[1].split("]", 1)[0].split(","))
+        self.assertEqual(ids, catalog.AUDIO_ONLY_VIDEO_FORMATS)
+
     def test_kind_for_extension(self):
         self.assertEqual(catalog.kind_for_extension(r"C:\a\b.MP4"), "video")
         self.assertEqual(catalog.kind_for_extension("x.heic"), "image")

@@ -53,11 +53,11 @@ VIDEO_FORMATS = [
     {"id": "gif", "label": "GIF", "codecs": [], "audio": False},
     {"id": "webp", "label": "WebP", "title": "Animated WebP", "codecs": [], "audio": False},
     {"id": "apng", "label": "APNG", "title": "Animated PNG", "codecs": [], "audio": False},
-    {"id": "mp3", "label": "MP3 · audio only", "codecs": [], "audio": True},
-    {"id": "m4a", "label": "M4A · audio only", "codecs": [], "audio": True},
-    {"id": "opus", "label": "Opus · audio only", "codecs": [], "audio": True},
-    {"id": "flac", "label": "FLAC · audio only", "codecs": [], "audio": True},
-    {"id": "wav", "label": "WAV · audio only", "codecs": [], "audio": True},
+    {"id": "mp3", "label": "MP3", "codecs": [], "audio": True},
+    {"id": "m4a", "label": "M4A", "codecs": [], "audio": True},
+    {"id": "opus", "label": "Opus", "codecs": [], "audio": True},
+    {"id": "flac", "label": "FLAC", "codecs": [], "audio": True},
+    {"id": "wav", "label": "WAV", "codecs": [], "audio": True},
 ]
 VIDEO_CODECS = [
     {"id": "h264", "label": "H.264", "gpu": True},

@@ -20,10 +20,44 @@ const ANIMATED = new Set(['gif', 'webp', 'apng']);
 
 const opt = (list) => list.map((x) => ({ value: String(x.id), label: x.label, title: x.title }));
 
-/** Short label of a format for summaries ("MP3 · audio only" -> "MP3"). */
+/** Label of a format for summaries: "MP3". */
 export function shortFormat(kind, id) {
   const f = formatsOf(kind).find((x) => x.id === id);
-  return f ? f.label.split(' · ')[0] : String(id || '').toUpperCase();
+  return f ? f.label : String(id || '').toUpperCase();
+}
+
+/** The video format choice as two option rows that hold one value between them: `Format` (outputs with a picture)
+ *  and `Audio only` (outputs that keep just the sound). The row without the value shows no selection and keeps its
+ *  first option as its tab stop, so Tab reaches both rows and the arrow keys move within one. */
+class FormatRows {
+  constructor(formats, value, onChange) {
+    this.rows = [false, true].map((audio) => new Segmented({
+      label: audio ? 'Audio only' : 'Format',
+      cls: 'seg-p',
+      options: opt(formats.filter((f) => AUDIO_ONLY.has(f.id) === audio)),
+      value,
+      onChange: (v) => {
+        this.set(v);
+        onChange(v);
+      },
+    }));
+    this._tabStops();
+  }
+
+  set(v) {
+    for (const r of this.rows) r.set(v);
+    this._tabStops();
+  }
+
+  _tabStops() {
+    for (const r of this.rows) {
+      if (!r.disabled && !r.opts.some((b) => b.dataset.v === r.value)) r.opts[0].tabIndex = 0;
+    }
+  }
+
+  destroy() {
+    for (const r of this.rows) r.destroy();
+  }
 }
 
 /** One-line summary of what a file becomes: "MP4 · H.264 · Quality 70". */
@@ -206,7 +240,10 @@ export class SettingsPanel {
     const o = store.options;
     const b = this.body;
     if (this.kind === 'video') {
-      b.append(this.row('format', 'Format', this.seg('format', 'Format', opt(o.video.formats), { scroll: true })));
+      const formats = new FormatRows(o.video.formats, String(this.s.format), (v) => this.patch({ format: v }));
+      this.parts.push(formats);
+      this.c.format = formats;
+      b.append(this.row('format', 'Format', formats.rows[0]), this.row('format_audio', 'Audio only', formats.rows[1]));
       this.codecSlot = el('div', 'p-slot');
       b.append(this.row('codec', 'Codec', this.codecSlot));
       b.append(this.row('encoder', 'Encoder', this.seg('encoder', 'Encoder', opt(o.video.encoders))));
