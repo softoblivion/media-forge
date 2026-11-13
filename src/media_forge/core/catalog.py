@@ -340,6 +340,7 @@ def output_path(source: str | os.PathLike, kind: str, settings: Mapping[str, Any
     """
     src = Path(source)
     suffix = str(global_settings.get("suffix", "_forge"))
+    sub = None
     if global_settings.get("output_mode") == "folder" and global_settings.get("output_dir"):
         folder = Path(str(global_settings["output_dir"]))
         sub = _relative_subfolder(rel_dir)
@@ -353,6 +354,7 @@ def output_path(source: str | os.PathLike, kind: str, settings: Mapping[str, Any
     stem = src.stem + suffix
     source_key = os.path.normcase(os.path.abspath(src))
     n = 1
+    recreated = 0
     while True:
         name = f"{stem}.{ext}" if n == 1 else f"{stem} ({n}).{ext}"
         candidate = folder / name
@@ -367,5 +369,26 @@ def output_path(source: str | os.PathLike, kind: str, settings: Mapping[str, Any
             fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
             continue
+        except FileNotFoundError:
+            # a failed job of the same folder removed the mirrored folder it had created and found empty
+            if sub is None or recreated >= 3:
+                raise
+            recreated += 1
+            folder.mkdir(parents=True, exist_ok=True)
+            n -= 1
+            continue
         os.close(fd)
         return candidate
+
+
+def mirrored_folders(global_settings: Mapping[str, Any], rel_dir: str) -> list[Path]:
+    """The folders `output_path` creates for `rel_dir` in folder mode, outermost first (empty beside the source)."""
+    sub = _relative_subfolder(rel_dir)
+    if sub is None or global_settings.get("output_mode") != "folder" or not global_settings.get("output_dir"):
+        return []
+    folder = Path(str(global_settings["output_dir"]))
+    found = []
+    for part in sub.parts:
+        folder = folder / part
+        found.append(folder)
+    return found

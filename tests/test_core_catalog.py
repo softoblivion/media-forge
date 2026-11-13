@@ -190,6 +190,35 @@ class OutputPathTest(ScratchCase):
         for bad in ("..", os.path.join("..", "up"), str(self.out), "C:/x", "C:x"):
             with self.subTest(rel_dir=bad):  # a sub-folder that would leave the output folder is ignored
                 self.assertEqual(catalog.output_path(src, "image", s, gs, rel_dir=bad).parent, target)
+        self.assertEqual(catalog.mirrored_folders(gs, rel), [target / "2024", target / "2024" / "05"])
+        self.assertEqual(catalog.mirrored_folders(beside, rel), [])
+        self.assertEqual(catalog.mirrored_folders(gs, ".."), [])
+
+    def test_a_mirrored_folder_removed_meanwhile_is_made_again(self):
+        """A failed job of the same sub-folder removes the empty folder between the mkdir and the reservation."""
+        import os
+        import tempfile
+        from unittest import mock
+
+        src = self.out / "card2" / "pic.jpg"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_bytes(b"x")
+        target = Path(tempfile.mkdtemp(prefix="mirror_gone_", dir=self.out))
+        gs = {"output_mode": "folder", "output_dir": str(target), "suffix": "_forge"}
+        s = catalog.normalize("image", {"format": "jpg"})
+        real_open, calls = os.open, []
+
+        def vanishing_open(path, *args, **kwargs):
+            calls.append(path)
+            if len(calls) == 1:
+                os.rmdir(os.path.dirname(path))
+            return real_open(path, *args, **kwargs)
+
+        with mock.patch.object(catalog.os, "open", vanishing_open):
+            reserved = catalog.output_path(src, "image", s, gs, reserve=True, rel_dir="day")
+        self.assertEqual(reserved, target / "day" / "pic_forge.jpg")
+        self.assertTrue(reserved.is_file())
+        self.assertEqual(len(calls), 2)
 
 
 if __name__ == "__main__":

@@ -109,6 +109,40 @@ class EngineTest(ScratchCase):
                 release.set()
                 engine.stop()
 
+    def test_animated_gif_when_ffmpeg_is_found_during_its_probe(self):
+        """The discovery that ends between the probe without ffprobe and its error still leads to a second probe."""
+        from unittest import mock
+
+        from media_forge.core import engine as engine_mod
+        from media_forge.core import tools
+        release = threading.Event()
+        real_find, real_probe = tools.find_ffmpeg, engine_mod.probe_mod.probe
+
+        def slow_find(*args, **kwargs):
+            release.wait(30)
+            return real_find(*args, **kwargs)
+
+        rec = Recorder()
+        engine = Engine(rec, "0.1.0", paths=AppPaths(home=self.out / "home_race_tools"), allow_download=False)
+
+        def racing_probe(path, ffprobe):
+            if ffprobe is None:  # the discovery finishes while this probe runs
+                release.set()
+                engine.wait_tools(60)
+            return real_probe(path, ffprobe)
+
+        with mock.patch.object(tools, "find_ffmpeg", slow_find), \
+                mock.patch.object(engine_mod.probe_mod, "probe", racing_probe):
+            engine.start()
+            try:
+                item = engine.add_files([str(media("anim.gif"))])
+                self.assertTrue(engine.wait_probed(60))
+                gif = engine.item(item[0]["id"])
+                self.assertEqual((gif["kind"], gif["status"], gif["error"]), ("video", "ready", None))
+            finally:
+                release.set()
+                engine.stop()
+
     def test_run_video_image_audio(self):
         items = self.add("clip.mp4", "photo.jpg", "tone.mp3")
         self.engine.set_item_settings(items[0]["id"], {"encoder": "cpu", "quality": 50})
@@ -321,6 +355,25 @@ class EngineTest(ScratchCase):
         self.assertEqual([p.parent for p in outputs], [target / r if r else target for r in rels])
         with self.assertRaises(ValueError):
             self.engine.add_files(["a.mp4", "b.mp4"], rel_dirs=[""])
+
+    def test_a_failed_job_removes_the_mirrored_folders_it_created(self):
+        import os
+        import tempfile
+        from pathlib import Path
+
+        target = Path(tempfile.mkdtemp(prefix="mirror_fail_", dir=self.out))
+        (target / "kept").mkdir()  # a folder that was there before stays, even when empty
+        self.engine.set_settings({"output_dir": str(target)})
+        items = self.engine.add_files([str(media("noaudio.mkv")), str(media("small.mp4"))],
+                                      rel_dirs=[os.path.join("2024", "05"), os.path.join("kept", "x")])
+        self.assertTrue(self.engine.wait_probed(60))
+        for item in items:
+            self.engine.set_item_settings(item["id"], {"format": "mp3"})  # no audio track: the job fails
+        self.engine.start_items(None)
+        self.assertTrue(self.engine.wait_idle(60))
+        self.assertEqual([self.engine.item(i["id"])["status"] for i in items], ["error", "error"])
+        self.assertEqual(sorted(p.name for p in target.iterdir()), ["kept"])
+        self.assertEqual(list((target / "kept").iterdir()), [])
 
 
 class QueueTest(unittest.TestCase):

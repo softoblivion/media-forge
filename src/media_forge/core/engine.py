@@ -37,6 +37,16 @@ def _path_key(path: str) -> str:
     return os.path.normcase(os.path.abspath(path))
 
 
+def _remove_empty_folders(folders: list[Path]) -> None:
+    """Remove the folders a failed job created, innermost first, as long as they are empty (another job's output
+    or placeholder keeps its folder)."""
+    for folder in reversed(folders):
+        try:
+            folder.rmdir()
+        except OSError:
+            return
+
+
 class Engine:
     def __init__(self, emit: EmitFn | None = None, version: str = "0.0.0", *, paths: AppPaths | None = None,
                  persist_settings: bool = True, allow_download: bool = True, use_path_ffmpeg: bool = True) -> None:
@@ -215,8 +225,9 @@ class Engine:
                 info = probe_mod.probe(item.path, tool.ffprobe if tool else None)
             except UserError as exc:
                 # An image extension that turns out to be an animation needs ffprobe: wait for the discovery
-                # rather than fail an item added in the first seconds of the app.
-                if exc.message != MSG_NO_FFMPEG or self._tools_ready.is_set():
+                # rather than fail an item added in the first seconds of the app. The test is the tool this probe
+                # ran without: the discovery may have finished since.
+                if exc.message != MSG_NO_FFMPEG or tool is not None:
                     raise
                 if not self._wait_tools_for(item_id):
                     return
@@ -396,9 +407,11 @@ class Engine:
             raise UserError(MSG_NOT_FOUND)
         info = item.info
         tool = self._wait_ffmpeg(ctx) if item.kind != "image" else self._tool
+        created = [f for f in catalog.mirrored_folders(global_settings, item.rel_dir) if not f.exists()]
         try:
             out = catalog.output_path(src, item.kind, settings, global_settings, reserve=True, rel_dir=item.rel_dir)
         except OSError as exc:
+            _remove_empty_folders(created)
             raise UserError(MSG_WRITE_DENIED) from exc
         workdir = self.paths.job_cache(ctx.job_id)
         ok = False
@@ -438,6 +451,7 @@ class Engine:
         finally:
             if not ok:
                 remove_path(out)
+                _remove_empty_folders(created)
             remove_path(workdir)
 
     def _describe_output(self, out: Path, item: Item, result: dict, tool: tools.FFmpeg | None) -> dict:
