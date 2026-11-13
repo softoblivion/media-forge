@@ -138,6 +138,7 @@ def is_media_path(path: str | os.PathLike) -> bool:
 MAX_WALK_FILES = 1000       # media files taken from the given folders
 MAX_WALK_ENTRIES = 100_000  # folder entries read before the walk stops (a drive root holds millions)
 MSG_WALK_STOPPED = "The folder is too large to read in full; the first {n} media files found were added."
+MSG_WALK_STOPPED_ONE = "The folder is too large to read in full; the first media file found was added."
 MSG_WALK_STOPPED_EMPTY = "The folder is too large to read in full; no media files were found in the part that was read."
 
 
@@ -553,7 +554,8 @@ class Bridge:
                                 max_files=MAX_WALK_FILES, max_entries=MAX_WALK_ENTRIES)
         if expanded.truncated:
             log.info("the folder walk stopped at its limit after %d media files", expanded.walked)
-            self._toast(MSG_WALK_STOPPED.format(n=expanded.walked) if expanded.walked else MSG_WALK_STOPPED_EMPTY)
+            self._toast(MSG_WALK_STOPPED_EMPTY if not expanded.walked else MSG_WALK_STOPPED_ONE
+                        if expanded.walked == 1 else MSG_WALK_STOPPED.format(n=expanded.walked))
         return expanded
 
     def _add_expanded(self, expanded: list[tuple[str, str]]) -> list:

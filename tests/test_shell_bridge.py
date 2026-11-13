@@ -562,7 +562,7 @@ class DropTest(BridgeTestBase):
             self.bridge._on_drop(self.drop_event(given, str(self.tmp / "big")))
         self.assertEqual([i["name"] for i in self.events("items_added")[-1][1]["items"]], ["given.mp4", "f0.mp4"])
         self.assertEqual(self.events("toast")[-1][1]["message"],
-                         "The folder is too large to read in full; the first 1 media files found were added.")
+                         "The folder is too large to read in full; the first media file found was added.")
 
     def test_a_walk_that_finds_nothing_beside_given_files_says_so(self):
         given = self.touch("given.mp4")
