@@ -6,6 +6,8 @@
 //   caps         js/main.js      (capabilities event)
 //   options      js/main.js      (State only; the option tables never change at runtime)
 //   update       js/main.js      (the kit's update control, onStatus of the update event)
+//   scales       js/main.js      (WindowState.scales of State and the window event: the Scale steps
+//                                 that fit the screen; null while the shell has not said)
 
 export const store = {
   version: '',
@@ -13,6 +15,7 @@ export const store = {
   caps: null,
   options: null,
   update: null,
+  scales: null,
   items: new Map(), // id -> Item, in list order
 };
 

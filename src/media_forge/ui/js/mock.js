@@ -164,6 +164,7 @@ export function createMock({ params, dispatch }) {
     skipped_major: null,
     theme: 'nova',
     ui_scale: 100,
+    window_bounds: null, // kept by the shell; the browser mock has no window to place
     defaults: clone(DEFAULTS),
   };
   const THEMES = ['dusk', 'nova', 'frost', 'bloom'];
@@ -1074,6 +1075,12 @@ export function createMock({ params, dispatch }) {
     async window_close() {
       console.info('[mock] window_close');
       return null;
+    },
+
+    async window_drag_start(part) {
+      // A browser window moves and resizes itself; the page mounts no top grip in the mock.
+      console.info('[mock] window_drag_start', part);
+      return false;
     },
 
     async update_status() {

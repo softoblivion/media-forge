@@ -1,7 +1,10 @@
 /* Media Forge screen: list and cards, settings panels, footer, empty state, drop veil, status
-   banner, scroll edges, size limit field, settings sheet content. Designed for 480-720 px wide
-   windows (3:4). The material, the buttons (including the hero Start pill), the controls, the
-   overlays, the toasts, the title bar, the theme row, the scale row and the scene come from the
+   banner, scroll edges, size limit field, settings sheet content, top resize grip. The window is
+   at least 480 x 640 px (the page's own px at every Scale step); more height shows more rows, more
+   width widens the column up to --col-max, beyond which the list and the footer stay centred
+   while the title bar and the scroll edges span the window. The material, the buttons (including
+   the hero Start pill), the controls, the overlays, the toasts, the title bar, the theme row, the
+   scale row and the scene come from the
    Liquid UI kit (vendor/liquid_ui/css); every colour here is a kit token (the four themes retint
    it) or one of the app's kind colours; every text is a role of the kit's type scale; every
    interface transition uses the kit's durations --d-1..--d-4 and easings. docs/UI_DESIGN.md,
@@ -16,6 +19,13 @@
 
   /* Footer height (also the hero pill's height) */
   --foot-h: 48px;
+
+  /* The widest column, gutters included: the widest designed window. Wider, a card's head row, its
+     panels' control rows and the footer would stretch into empty space between their ends. */
+  --col-max: 720px;
+  /* Left and right inset of the list and the footer: the gutter, plus the margin that centres
+     the column in a wider window. */
+  --col-inset: max(var(--gutter), calc((100vw - var(--col-max)) / 2 + var(--gutter)));
 }
 
 #app {
@@ -33,7 +43,7 @@
   inset: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: calc(var(--titlebar-h) + 8px) var(--gutter) calc(var(--foot-h) + 40px);
+  padding: calc(var(--titlebar-h) + 8px) var(--col-inset) calc(var(--foot-h) + 40px);
   scroll-padding: calc(var(--titlebar-h) + 12px) 0 calc(var(--foot-h) + 40px);
   overscroll-behavior: contain;
 }
@@ -80,6 +90,22 @@
 }
 
 html.has-items .edge-bottom { opacity: 1; }
+
+/* Top resize grip (js/windowdrag.js): a strip along the window's top edge, above every layer, with
+   the system's resize cursors; the corners take the diagonal ones. */
+.top-grip {
+  position: fixed;
+  z-index: 1000;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  display: flex;
+}
+
+.top-grip span { flex: 1; cursor: ns-resize; }
+.top-grip [data-edge="top-left"] { flex: none; width: 14px; cursor: nwse-resize; }
+.top-grip [data-edge="top-right"] { flex: none; width: 14px; cursor: nesw-resize; }
 
 /* ---------------------------------------------------------------------------------------------
    Status banner (FFmpeg) */
@@ -458,8 +484,8 @@ html.has-items .edge-bottom { opacity: 1; }
 .foot {
   position: fixed;
   z-index: 25;
-  left: var(--gutter);
-  right: var(--gutter);
+  left: var(--col-inset);
+  right: var(--col-inset);
   bottom: 12px;
   height: var(--foot-h);
   display: flex;

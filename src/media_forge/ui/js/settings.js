@@ -12,7 +12,7 @@ import { Overlay } from '../vendor/liquid_ui/js/overlay.js';
 import { gel } from '../vendor/liquid_ui/js/glass.js';
 import { Segmented, Switch, Stepper } from '../vendor/liquid_ui/js/controls.js';
 import { applyTheme, mountThemeControl } from '../vendor/liquid_ui/js/theme.js';
-import { mountScaleControl } from '../vendor/liquid_ui/js/scale.js';
+import { mountScaleControl, SCALE_STEPS } from '../vendor/liquid_ui/js/scale.js';
 import { SettingsPanel } from './panels.js';
 import { icon } from './icons.js';
 import { escapeHtml, KIND_LABEL } from './format.js';
@@ -39,6 +39,17 @@ export function initSettings(state, updateControl) {
     if (overlay.open) refresh(s);
   });
   watch('caps', () => overlay.open && renderEngine());
+  watch('scales', () => overlay.open && syncScales());
+}
+
+/** Dim the Scale steps whose minimum window does not fit this screen (store.scales, from the shell). */
+function syncScales() {
+  if (!ctl.ui_scale || !content.firstElementChild) return;
+  const fits = store.scales;
+  for (const step of SCALE_STEPS) {
+    const off = Array.isArray(fits) && !fits.includes(step);
+    ctl.ui_scale.control.setOptionDisabled(String(step), off, off ? 'Too large for this screen' : '');
+  }
 }
 
 export function settingsOpen() {
@@ -190,6 +201,7 @@ function build() {
       }
     },
   });
+  syncScales();
 
   // Output mode.
   ctl.output_mode = new Segmented({

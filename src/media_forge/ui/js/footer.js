@@ -66,6 +66,13 @@ export function initFooter() {
   watch('items', render);
   watch('caps', render);
   on('batch_done', onBatchDone);
+  // A window resize changes the footer width: the pill's cap follows it and an open menu stays
+  // under its chevron.
+  new ResizeObserver(() => {
+    if (!shown) return;
+    fitWidth(startBtn.dataset.state, startBtn.querySelector('.pm-text').textContent);
+    if (menuOpen()) placeMenu();
+  }).observe(foot);
   render();
 }
 
@@ -176,7 +183,7 @@ function setStartState(state, c, items, ffReady) {
 
 /** Spring the pill width to its content (min 140 px, 168 while running, max 46 % of the footer). */
 function fitWidth(state, label) {
-  const key = `${state}|${state === 'ready' || state === 'empty' ? label : ''}`;
+  const key = `${state}|${state === 'ready' || state === 'empty' ? label : ''}|${foot.clientWidth}`;
   if (startBtn.__wkey === key) return;
   startBtn.__wkey = key;
   const layer = startBtn.querySelector(state === 'progress' ? '.pm-progress' : state === 'done' ? '.pm-done' : '.pm-label');
@@ -265,15 +272,21 @@ function openMenu() {
   m.getAnimations().forEach((a) => a.cancel());
   m.classList.remove('is-closing');
   m.hidden = false;
+  placeMenu();
   const more = stats.querySelector('.split-more');
-  const r = more.getBoundingClientRect();
-  const f = foot.getBoundingClientRect();
-  m.style.left = `${Math.max(0, Math.round(r.right - f.left - m.offsetWidth + 6))}px`;
   more.setAttribute('aria-expanded', 'true');
   fadeIn(m);  // the kit's menu entrance
   const first = m.querySelector('.menu-item:not(:disabled)');
   first && first.focus();
   addEventListener('pointerdown', outside, true);
+}
+
+/** The menu's right edge under the chevron of the Clear split button. */
+function placeMenu() {
+  const m = menu();
+  const r = stats.querySelector('.split-more').getBoundingClientRect();
+  const f = foot.getBoundingClientRect();
+  m.style.left = `${Math.max(0, Math.round(r.right - f.left - m.offsetWidth + 6))}px`;
 }
 
 function closeMenu() {

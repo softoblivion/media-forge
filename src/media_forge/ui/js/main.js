@@ -16,6 +16,7 @@ import { mountUpdateControl } from '../vendor/liquid_ui/js/update.js';
 import { mountTitlebar } from '../vendor/liquid_ui/js/titlebar.js';
 import { initDropzone } from './dropzone.js';
 import { initSound } from './sound.js';
+import { initWindowDrag, setWindowDrag } from './windowdrag.js';
 
 // The theme saved with the settings (BRIDGE_API 3.5 `theme`): applied through the kit on every
 // confirmed settings object and mirrored in localStorage so index.html sets it before the first
@@ -220,6 +221,7 @@ async function boot() {
   initSound();
   initPastePaths();
   initKeys();
+  initWindowDrag();
 
   on('capabilities', (c) => {
     if (!c) return;
@@ -227,8 +229,17 @@ async function boot() {
     notify('caps', c);
   });
   on('toast', (t) => t && toast(t.kind || 'info', t.message));
-  on('window', (w) => w && setFocused(!!w.focused));
-  if (state.window) setFocused(state.window.focused !== false);
+  const syncWindow = (w) => {
+    if (!w) return;
+    setFocused(w.focused !== false);
+    setWindowDrag(w.drag === true);
+    if (Array.isArray(w.scales)) {
+      store.scales = w.scales;
+      notify('scales', w.scales);
+    }
+  };
+  on('window', syncWindow);
+  syncWindow(state.window);
 
   goLive();
   document.body.classList.add('is-ready');
