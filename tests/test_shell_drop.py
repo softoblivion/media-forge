@@ -130,6 +130,42 @@ class ExpandPathsTest(unittest.TestCase):
         a = self.touch("Ünïcode folder (1)/clip 01.webm")
         self.assertEqual(expand_paths([str(Path(a).parent)]), [(a, "")])
 
+    def test_the_output_folder_below_a_given_folder_is_not_walked(self):
+        a = self.touch("card/day1/a.mp4")
+        self.touch("card/Converted/day1/a_forge.mp4")
+        skip = str(self.tmp / "card" / "converted" / ".")  # another spelling of the same folder
+        result = expand_paths([str(self.tmp / "card")], skip_folder=skip)
+        self.assertEqual(result, [(a, "day1")])
+        self.assertFalse(result.truncated)
+
+    def test_the_output_folder_given_itself_is_walked(self):
+        b = self.touch("converted/b_forge.mp4")
+        self.assertEqual(expand_paths([str(self.tmp / "converted")], skip_folder=str(self.tmp / "converted")),
+                         [(b, "")])
+
+    def test_the_walk_stops_at_the_file_limit(self):
+        names = [self.touch(f"f/{n}.mp4") for n in "abcde"]
+        loose = self.touch("loose.mp4")
+        result = expand_paths([str(self.tmp / "f"), loose, str(self.tmp / "f")], max_files=3)
+        self.assertEqual([p for p, _ in result], names[:3] + [loose])  # a given file is still taken
+        self.assertTrue(result.truncated)
+
+    def test_exactly_the_limit_is_not_a_stop(self):
+        for n in "abc":
+            self.touch(f"f/{n}.mp4")
+        self.touch("f/sub/readme.txt")
+        result = expand_paths([str(self.tmp / "f")], max_files=3)
+        self.assertEqual(len(result), 3)
+        self.assertFalse(result.truncated)
+
+    def test_the_walk_stops_at_the_entry_limit(self):
+        for n in range(4):
+            self.touch(f"f/sub{n}/x.txt")
+        self.touch("f/sub3/late.mp4")
+        result = expand_paths([str(self.tmp / "f")], max_entries=6)
+        self.assertEqual(result, [])
+        self.assertTrue(result.truncated)
+
 
 if __name__ == "__main__":
     unittest.main()

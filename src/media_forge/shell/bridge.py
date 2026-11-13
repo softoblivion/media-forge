@@ -135,13 +135,37 @@ def is_media_path(path: str | os.PathLike) -> bool:
     return Path(path).suffix.lower() in MEDIA_EXTENSIONS
 
 
-def expand_paths(paths: Iterable[str]) -> list[tuple[str, str]]:
+MAX_WALK_FILES = 1000       # media files taken from the given folders
+MAX_WALK_ENTRIES = 100_000  # folder entries read before the walk stops (a drive root holds millions)
+MSG_WALK_STOPPED = "The folder is too large to read in full; the first {n} media files found were added."
+MSG_WALK_STOPPED_EMPTY = "The folder is too large to read in full; no media files were found in the part that was read."
+
+
+class Expanded(list):
+    """The `(path, sub-folder)` pairs of `expand_paths`; `truncated` is True when a folder walk stopped at a limit."""
+
+    truncated = False
+
+
+def _folder_key(path: str) -> str:
+    try:
+        return os.path.normcase(os.path.realpath(path))
+    except (OSError, ValueError):
+        return os.path.normcase(os.path.abspath(path))
+
+
+def expand_paths(paths: Iterable[str], skip_folder: str | None = None, max_files: int = MAX_WALK_FILES,
+                 max_entries: int = MAX_WALK_ENTRIES) -> Expanded:
     """`(path, sub-folder)` pairs. A file comes as given with sub-folder "". A folder becomes the media files in it
     and in every folder below it, each with its folder relative to the given one ("" directly inside it): sorted by
-    name, a folder's own files before its sub-folders; links and junctions to folders are not followed. Duplicates
-    are dropped, the order is kept; missing paths are passed on (the engine reports them)."""
-    out: list[tuple[str, str]] = []
+    name, a folder's own files before its sub-folders; links and junctions to folders are not followed, nor is
+    `skip_folder` (the output folder, whose files are the app's own outputs) when it lies below a given folder.
+    The walks stop after `max_files` media files or `max_entries` folder entries in all, with `truncated` set.
+    Duplicates are dropped, the order is kept; missing paths are passed on (the engine reports them)."""
+    out = Expanded()
     seen: set[str] = set()
+    skip = _folder_key(skip_folder) if skip_folder else None
+    budget = {"files": max_files, "entries": max_entries}
 
     def add(path: str, rel_dir: str) -> None:
         key = os.path.normcase(os.path.abspath(path))
@@ -160,12 +184,21 @@ def expand_paths(paths: Iterable[str]) -> list[tuple[str, str]]:
                 continue
             subfolders: list[tuple[str, str]] = []
             for entry in entries:
+                budget["entries"] -= 1
+                if budget["entries"] < 0:
+                    out.truncated = True
+                    return
                 try:
                     if entry.is_dir(follow_symlinks=False):
-                        if not entry.is_junction():
+                        if not entry.is_junction() and _folder_key(entry.path) != skip:
                             subfolders.append((entry.path, os.path.join(rel_dir, entry.name)))
                     elif entry.is_file() and is_media_path(entry.name):
+                        if budget["files"] <= 0:
+                            out.truncated = True
+                            return
+                        before = len(out)
                         add(entry.path, rel_dir)
+                        budget["files"] -= len(out) - before
                 except OSError:
                     continue
             stack.extend(reversed(subfolders))
@@ -175,6 +208,8 @@ def expand_paths(paths: Iterable[str]) -> list[tuple[str, str]]:
             continue
         path = os.path.normpath(raw.strip())
         if os.path.isdir(path):
+            if out.truncated:
+                continue
             walk(path)
         else:
             add(path, "")
@@ -491,9 +526,10 @@ class Bridge:
     def _add_dropped(self, paths: list[str], empty_message: str = "No media files in the dropped folder.") -> list:
         """Add paths that come from the shell (a drop, the command line, a second start) and announce the items with
         `items_added`; `empty_message` is the toast when the paths hold no media file."""
-        expanded = expand_paths(paths)
+        expanded = self._expand(paths)
         if not expanded:
-            self._toast(empty_message)
+            if not expanded.truncated:
+                self._toast(empty_message)
             return []
         try:
             items = self._add_expanded(expanded)
@@ -505,6 +541,17 @@ class Bridge:
         if items:
             self._emit("items_added", {"items": items})
         return items
+
+    def _expand(self, paths: list[str]) -> Expanded:
+        """`expand_paths` with the chosen output folder left out of the walk; a walk that stopped at its limit is
+        told with a toast."""
+        folder = self._setting("output_dir") if self._setting("output_mode") == "folder" else None
+        expanded = expand_paths(paths, skip_folder=folder if isinstance(folder, str) and folder else None,
+                                max_files=MAX_WALK_FILES, max_entries=MAX_WALK_ENTRIES)
+        if expanded.truncated:
+            log.info("the folder walk stopped at its limit after %d media files", len(expanded))
+            self._toast(MSG_WALK_STOPPED.format(n=len(expanded)) if expanded else MSG_WALK_STOPPED_EMPTY)
+        return expanded
 
     def _add_expanded(self, expanded: list[tuple[str, str]]) -> list:
         """Queue the pairs of `expand_paths`; the sub-folders are mirrored under a chosen output folder."""
@@ -638,7 +685,7 @@ class Bridge:
     def add_files(self, paths):
         if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
             raise BridgeError("Invalid file list.")
-        expanded = expand_paths(paths)
+        expanded = self._expand(paths)
         if not expanded:
             return []
         return self._add_expanded(expanded)

@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
@@ -523,6 +524,44 @@ class DropTest(BridgeTestBase):
         self.bridge._on_drop({"dataTransfer": {"files": [{"name": "x.mp4"}]}})
         self.bridge._on_drop(None)
         self.assertEqual(self.engine.calls, [])
+
+    def test_a_second_drop_of_a_folder_holding_the_output_folder_adds_no_output(self):
+        # Output folder inside the dropped folder: the first run writes card\converted\day1\a_forge.mp4; dropping
+        # card again must queue the source only, not the output (which would nest converted\converted\...).
+        self.touch("card/day1/a.mp4")
+        out_dir = self.tmp / "card" / "converted"
+        self.touch("card/converted/day1/a_forge.mp4")
+        self.bridge.set_settings({"output_mode": "folder", "output_dir": str(out_dir)})
+        self.bridge._on_drop(self.drop_event(str(self.tmp / "card")))
+        items = self.events("items_added")[-1][1]["items"]
+        self.assertEqual([i["name"] for i in items], ["a.mp4"])
+        self.bridge.add_files([str(self.tmp / "card")])  # a pasted folder path: the same walk
+        name, args = self.engine.calls[-1][0], self.engine.calls[-1][1]
+        self.assertEqual((name, [Path(p).name for p in args[0]]), ("add_files", ["a.mp4"]))
+
+    def test_the_output_folder_is_walked_when_files_are_written_beside_the_source(self):
+        self.touch("card/converted/b.mp4")
+        self.bridge.set_settings({"output_mode": "beside", "output_dir": str(self.tmp / "card" / "converted")})
+        self.bridge._on_drop(self.drop_event(str(self.tmp / "card")))
+        self.assertEqual([i["name"] for i in self.events("items_added")[-1][1]["items"]], ["b.mp4"])
+
+    def test_a_walk_that_stops_at_its_limit_says_so(self):
+        for n in range(5):
+            self.touch(f"big/f{n}.mp4")
+        with mock.patch.object(bridge_mod, "MAX_WALK_FILES", 3):
+            self.bridge._on_drop(self.drop_event(str(self.tmp / "big")))
+        self.assertEqual([i["name"] for i in self.events("items_added")[-1][1]["items"]], ["f0.mp4", "f1.mp4", "f2.mp4"])
+        self.assertEqual(self.events("toast")[-1][1]["message"],
+                         "The folder is too large to read in full; the first 3 media files found were added.")
+
+    def test_a_walk_that_stops_before_any_media_file_says_so(self):
+        for n in range(5):
+            self.touch(f"big/n{n}.txt")
+        with mock.patch.object(bridge_mod, "MAX_WALK_ENTRIES", 3):
+            self.bridge._on_drop(self.drop_event(str(self.tmp / "big")))
+        self.assertEqual(self.events("items_added"), [])
+        self.assertEqual([t[1]["message"] for t in self.events("toast")],
+                         ["The folder is too large to read in full; no media files were found in the part that was read."])
 
     def test_engine_failure_on_drop_becomes_toast(self):
         def broken(_paths, rel_dirs=None):
