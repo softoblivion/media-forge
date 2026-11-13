@@ -11,7 +11,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Mapping
 
-from . import catalog
+from . import catalog, procs
 from .audio import audio_settings_from_video, run_audio
 from .errors import MSG_CANNOT_LIMIT, MSG_LIMIT_NOT_MET, MSG_NO_DURATION, MSG_NO_VIDEO, Cancelled, UserError
 from .ffjob import HEAD, FFmpegError, Plan, Step, metadata_args, run_steps
@@ -38,6 +38,7 @@ BUDGET_MARGIN = 0.96
 MIN_VIDEO_KBPS = 80
 LOW_KBPS_FIT = 150
 AUDIO_FIT_KBPS = (192, 160, 128, 96, 64, 48, 32)  # audio rates tried, highest first, when a size cap needs room
+STREAM_READ_TIMEOUT = 120.0  # seconds to read the packet sizes of an output's audio stream
 GIF_MAX_FPS = 15
 GIF_PALETTE = "split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5"
 SEI_FILTER = {"libx264": "filter_units=remove_types=6", "libx265": "filter_units=remove_types=39"}
@@ -119,6 +120,35 @@ def _copies_audio(plan: Plan) -> bool:
     return any(a == "-c:a" and b == "copy" for args in plan.commands() for a, b in zip(args, args[1:]))
 
 
+def _audio_bytes(ffmpeg: str, path: Path) -> int | None:
+    """Bytes of the first audio stream of `path`, summed over its packets (ffmpeg's framecrc lists each packet's
+    size); None when they cannot be read."""
+    res = procs.run([ffmpeg, "-v", "error", "-i", str(path), "-map", "0:a:0", "-c", "copy", "-f", "framecrc", "-"],
+                    capture=True, timeout=STREAM_READ_TIMEOUT)
+    if not res.ok:
+        return None
+    total = 0
+    for line in res.stdout.decode("ascii", errors="replace").splitlines():
+        cells = [c.strip() for c in line.split(",")]
+        if line.startswith("#") or len(cells) < 6:
+            continue
+        try:
+            total += int(cells[4])
+        except ValueError:
+            return None
+    return total
+
+
+def _video_scale_after_copy(plan: Plan, size: int, audio_bytes: int | None) -> float:
+    """The share of the planned video rate a retry keeps once a copied track is re-encoded: 1 when the video kept
+    to its rate (the overshoot was the track's), else its own overshoot with a 5 % margin."""
+    if audio_bytes is None or not plan.video_kbps or not plan.duration:
+        return 1.0
+    video_bits = (size - audio_bytes) * 8.0
+    target_bits = plan.video_kbps * 1000.0 * float(plan.duration)
+    return 1.0 if video_bits <= target_bits else 0.95 * target_bits / video_bits
+
+
 def _codec_args(codec: str, encoder: str, quality: int, kbps: int | None, gop: int, strip: bool,
                 fmt: str, pass_no: int | None = None) -> list[str]:
     if codec == "copy":
@@ -183,10 +213,11 @@ def _rate_args(codec: str, quality: int, kbps: int | None, pass_no: int | None) 
 
 def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Mapping[str, Any] | None,
                ffmpeg: str, out: Path, workdir: Path, *, force_cpu: bool = False,
-               video_kbps: int | None = None, audio_fit: bool = False) -> Plan:
+               video_kbps: int | None = None, audio_fit: bool = False, video_scale: float = 1.0) -> Plan:
     """Decide every ffmpeg argument of a video job. Raises UserError for impossible requests.
 
-    `audio_fit` (the size-cap retry after a copied audio track) re-encodes the audio at a lower rate."""
+    `audio_fit` (the size-cap retry after a copied audio track) re-encodes the audio at a lower rate; the video then
+    takes the budget minus the new audio rate, times `video_scale` (its own overshoot in the first pass)."""
     fmt = settings["format"]
     if fmt in catalog.AUDIO_ONLY_VIDEO_FORMATS:
         from .audio import plan_audio
@@ -246,8 +277,10 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
         kbps = max(MIN_VIDEO_KBPS, int(math.floor((budget - audio_bits) / float(duration) / 1000.0)))
         if video_kbps is not None and not audio_refitted:
             # the retry's video rate, scaled by the overshoot; a retry that re-encodes a copied track instead keeps
-            # the budget minus the new audio rate, since the overshoot came from that track's unknown size
+            # the budget minus the new audio rate, scaled only by the video's own share of the overshoot
             kbps = max(MIN_VIDEO_KBPS // 2, int(video_kbps))
+        elif audio_refitted and video_scale < 1.0:
+            kbps = max(MIN_VIDEO_KBPS // 2, int(kbps * video_scale))
         if kbps < LOW_KBPS_FIT and not factor and min(w, h) > 720 and (fit is None or fit > 720):
             fit = 720
             plan.notes.append(f"video bitrate {kbps} kbps is low; fitting the frame to 720p")
@@ -451,9 +484,13 @@ def run_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Map
         size = out.stat().st_size
         if size > plan.size_limit_bytes:
             new_kbps = max(1, int((plan.video_kbps or MIN_VIDEO_KBPS) * plan.size_limit_bytes / size * 0.95))
-            log.info("output %d B exceeds the cap %d B; retrying at %d kbps", size, plan.size_limit_bytes, new_kbps)
+            copied = _copies_audio(plan)
+            # a copied track's real size tells its share of the overshoot from the video's own
+            scale = _video_scale_after_copy(plan, size, _audio_bytes(ffmpeg, out)) if copied else 1.0
+            log.info("output %d B exceeds the cap %d B; retrying at %d kbps (video share %.3f)", size,
+                     plan.size_limit_bytes, new_kbps, scale)
             plan = plan_video(src, info, settings, caps, ffmpeg, out, workdir, force_cpu=force_cpu,
-                              video_kbps=new_kbps, audio_fit=_copies_audio(plan))
+                              video_kbps=new_kbps, audio_fit=copied, video_scale=scale)
             _execute(plan, model, ctx, "retrying")
             if out.stat().st_size > plan.size_limit_bytes:
                 raise UserError(MSG_LIMIT_NOT_MET)

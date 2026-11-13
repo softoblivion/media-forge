@@ -87,6 +87,47 @@ class SizeCapPlanTest(unittest.TestCase):
                                  video_kbps=scaled, audio_fit=False)
         self.assertEqual(plain.video_kbps, scaled)
 
+    def run_capped(self, video_overshoot: float, track_kbps: float) -> list:
+        """run_video on a 60 s 10 MB cap job with a copied FLAC track, its passes faked: each writes the video at
+        `video_overshoot` times its planned rate plus the audio (`track_kbps` copied, the planned rate encoded).
+        Returns the plans of the passes."""
+        import tempfile
+        from unittest import mock
+
+        info = probe.ProbeInfo(kind="video", has_video=True, has_audio=True, width=1920, height=1080,
+                               duration=60.0, fps=30.0, vcodec="h264", acodec="flac", bitrate=3_000_000,
+                               sample_rate=48000, channels=2)
+        s = catalog.normalize("video", dict(catalog.defaults("video"), format="mkv", audio="keep",
+                                            size_limit_mb=10), None)
+        plans = []
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "o.mkv"
+
+            def fake_pass(plan, model, ctx, stage=None):
+                plans.append(plan)
+                if video._copies_audio(plan):
+                    audio = track_kbps
+                else:
+                    audio = float(next(int(n.split()[3]) for n in plan.notes if n.startswith("audio re-encoded")))
+                out.write_bytes(b"\0" * int((plan.video_kbps * video_overshoot + audio) * 1000 / 8 * 60))
+
+            with mock.patch.object(video, "_execute", fake_pass), \
+                    mock.patch.object(video, "_audio_bytes", lambda ffmpeg, path: int(track_kbps * 1000 / 8 * 60),
+                                      create=True):
+                video.run_video(Path("x.mkv"), info, s, None, "ffmpeg", out, Path(tmp), None)
+            self.assertLessEqual(out.stat().st_size, 10 * 1024 * 1024)
+        return plans
+
+    def test_a_retry_after_a_copied_track_keeps_the_video_on_its_own_overshoot(self):
+        budget_kbps = 10 * 1024 * 1024 * 8 * video.BUDGET_MARGIN / 60 / 1000
+        # the track was the overshoot, the video kept its rate: the video gets the room the track frees
+        first, retry = self.run_capped(video_overshoot=1.0, track_kbps=1000)
+        self.assertEqual(retry.video_kbps, int(budget_kbps - 192))
+        # the track was as planned, the video overshot by 30 %: the retry lowers the video by that overshoot
+        first, retry = self.run_capped(video_overshoot=1.3, track_kbps=300)
+        self.assertLess(retry.video_kbps, first.video_kbps)
+        self.assertAlmostEqual(retry.video_kbps, (budget_kbps - 192) * 0.95 / 1.3, delta=2)
+
     def test_loop_arguments_follow_the_play_count(self):
         self.assertEqual(video._loop_args("gif", 0), ["-loop", "0"])
         self.assertEqual(video._loop_args("gif", 1), ["-loop", "-1"])
@@ -351,6 +392,16 @@ class VideoTest(ScratchCase):
         out, plan, _ = self.run_job("clip_pcm.mkv", "pcm_roomy.mkv", format="mkv", codec="h264", encoder="cpu",
                                     size_limit_mb=4.0)
         self.assertEqual(astreams(ffprobe(out))[0]["codec_name"], "pcm_s16le")
+
+    def test_the_audio_stream_size_is_read_from_its_packets(self):
+        src = media("clip_hq.mp4")
+        out = subprocess.run([FFPROBE, "-v", "error", "-select_streams", "a:0", "-show_entries", "packet=size",
+                              "-of", "csv=p=0", str(src)], capture_output=True, check=True, text=True,
+                             creationflags=procs.CREATE_NO_WINDOW)
+        expected = sum(int(line.split(",")[0]) for line in out.stdout.split())  # side data adds cells
+        self.assertGreater(expected, 0)
+        self.assertEqual(video._audio_bytes(FFMPEG, src), expected)
+        self.assertIsNone(video._audio_bytes(FFMPEG, self.out_path("missing.mp4")))
 
     def test_size_limit_nvenc(self):
         if not nvenc()["h264"]:
