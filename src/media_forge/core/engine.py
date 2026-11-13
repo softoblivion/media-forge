@@ -22,7 +22,7 @@ from . import catalog, ffjob, image as image_mod, probe as probe_mod, procs, too
 from .errors import (MSG_BUSY, MSG_NO_FFMPEG, MSG_NOT_FOUND, MSG_OUTPUT_DIR_MISSING, MSG_UNKNOWN_ITEM,
                      MSG_WRITE_DENIED, Cancelled, UserError)
 from .jobs import Item, JobContext, JobQueue
-from .paths import AppPaths, remove_path
+from .paths import AppPaths, copy_file_times, remove_path
 from .settings import Settings, folder_usable
 
 log = logging.getLogger("media_forge.core.engine")
@@ -413,6 +413,11 @@ class Engine:
                 audio_mod.run_audio(src, info, settings, tool.ffmpeg, out, ctx)
             if ctx.cancel.is_set():
                 raise Cancelled()
+            if global_settings.get("keep_file_dates"):
+                try:
+                    copy_file_times(src, out)
+                except OSError as exc:  # the output itself is fine; only its dates stay the run time
+                    log.warning("job %s: file dates not copied: %s", ctx.job_id, exc)
             output = self._describe_output(out, item, result, tool)
             ok = True
             return output

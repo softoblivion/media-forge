@@ -38,6 +38,7 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "output_mode": "beside",
     "output_dir": "",
     "suffix": "_forge",
+    "keep_file_dates": True,  # the output gets the source's modified and accessed times
     "parallel_jobs": 1,
     "open_when_done": False,
     "sound_when_done": True,

@@ -33,6 +33,7 @@ The gear in the title bar opens the settings sheet.
 | **Scale** | 100 (default), 125, 150, 175 or 200 %: the size of the whole window and its text, on top of the Windows display scaling. The window grows with the step; on a small screen it keeps a layout step that still fits. |
 | **Output** | Next to the source (`<name>_forge.<ext>`) or one folder of your choice. |
 | **Suffix** | The part added to the file name, `_forge` by default; may be empty when outputs go to a folder. |
+| **Keep file dates** | On by default: each output gets the modified and created dates of its source, so files sorted by date stay in order. Off: the output carries the time it was written. |
 | **Parallel jobs** | 1 to 3 files at a time. |
 | **Open the folder when done** | Opens Explorer with the last output selected after a batch. |
 | **Sound when done** | A short chime when a batch finishes. |

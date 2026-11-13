@@ -218,6 +218,13 @@ class DelegationTest(BridgeTestBase):
         self.assertEqual(self.bridge.capabilities()["ffmpeg"], "ready")
         self.assertEqual(self.bridge.get_settings()["suffix"], "_forge")
         self.assertEqual(self.bridge.set_settings({"parallel_jobs": 2})["parallel_jobs"], 2)
+        self.assertIs(self.bridge.get_settings()["keep_file_dates"], True)
+        self.assertIs(self.bridge.set_settings({"keep_file_dates": False})["keep_file_dates"], False)
+
+    def test_fake_settings_keys_match_the_core(self):
+        from media_forge.core.settings import GLOBAL_DEFAULTS
+        from tests.shell_fake_engine import SETTINGS
+        self.assertEqual(set(SETTINGS), set(GLOBAL_DEFAULTS))
 
     def test_open_url(self):
         self.assertTrue(self.bridge.open_url("https://github.com/softoblivion/media-forge/releases"))

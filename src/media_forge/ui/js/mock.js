@@ -156,6 +156,7 @@ export function createMock({ params, dispatch }) {
     output_mode: 'beside',
     output_dir: '',
     suffix: '_forge',
+    keep_file_dates: true,
     parallel_jobs: 1,
     open_when_done: false,
     sound_when_done: true,
@@ -221,6 +222,7 @@ export function createMock({ params, dispatch }) {
           if (isFinite(n)) next.parallel_jobs = Math.min(3, Math.max(1, n));
           break;
         }
+        case 'keep_file_dates':
         case 'open_when_done':
         case 'sound_when_done':
         case 'auto_download_updates':

@@ -124,6 +124,15 @@ class SettingsTest(ScratchCase):
         s.paths.settings_file.write_text(json.dumps({"auto_download_updates": False}), encoding="utf-8")
         self.assertIs(s.load()["auto_download_updates"], False)  # a copy that turned it off keeps it off
 
+    def test_keep_file_dates_defaults_to_on(self):
+        s = self.fresh("keep_dates")
+        self.assertIs(s.load()["keep_file_dates"], True)
+        s.paths.settings_file.write_text(json.dumps({"suffix": "_x"}), encoding="utf-8")  # a file of an older version
+        self.assertIs(s.load()["keep_file_dates"], True)
+        self.assertIs(s.patch({"keep_file_dates": False})["keep_file_dates"], False)
+        self.assertIs(s.load()["keep_file_dates"], False)  # survives a restart
+        self.assertIs(s.patch({"keep_file_dates": "yes"})["keep_file_dates"], False)  # a non-bool keeps the value
+
     def test_skipped_major_is_persisted(self):
         s = self.fresh("skipped_major")
         self.assertIsNone(s.load()["skipped_major"])  # absent from older files: nothing skipped

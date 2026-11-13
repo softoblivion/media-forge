@@ -110,6 +110,7 @@ async function save(key, patch, revert) {
 }
 
 const busy = (k) => (inflight.get(k) || 0) > 0;
+const SWITCHES = ['keep_file_dates', 'open_when_done', 'sound_when_done'];
 
 function group(title, inner, cls = '') {
   return `<section class="set-group ${cls}"><h3>${escapeHtml(title)}</h3><div class="set-card">${inner}</div></section>`;
@@ -137,7 +138,8 @@ function build() {
         <div class="set-row" data-row="suffix">
           <div class="set-label"><span>File name suffix</span><small data-suffix-example></small></div>
           <div class="set-ctl"><input class="field field-s mono" id="suffix-in" maxlength="24" spellcheck="false" autocomplete="off" aria-label="File name suffix"></div>
-        </div>`)}
+        </div>
+        ${rowHtml('keep_file_dates', 'Keep file dates', 'The output gets the date modified of its source')}`)}
       ${group('Processing', `
         ${rowHtml('parallel_jobs', 'Files at the same time', 'More than one helps with many small files')}
         ${rowHtml('open_when_done', 'Open the folder when done', 'After a batch finishes')}
@@ -222,7 +224,7 @@ function build() {
   // Processing.
   ctl.parallel_jobs = new Stepper({ label: 'Files at the same time', value: s.parallel_jobs, min: 1, max: 3, onChange: (v) => save('parallel_jobs', { parallel_jobs: v }) });
   slot('parallel_jobs').append(ctl.parallel_jobs.el);
-  for (const k of ['open_when_done', 'sound_when_done']) {
+  for (const k of SWITCHES) {
     ctl[k] = new Switch({ label: content.querySelector(`[data-row="${k}"] .set-label span`).textContent, checked: s[k], onChange: (v) => save(k, { [k]: v }) });
     slot(k).append(ctl[k].el);
   }
@@ -320,7 +322,7 @@ function refresh(s, justSaved = null) {
   const sufRow = content.querySelector('[data-row="suffix"] small');
   if (sufRow && s.output_mode === 'folder' && !s.suffix) sufRow.innerHTML += ' <span class="set-note">(no suffix: the name stays the same)</span>';
   if (!busy('parallel_jobs') && ctl.parallel_jobs) ctl.parallel_jobs.set(s.parallel_jobs);
-  for (const k of ['open_when_done', 'sound_when_done']) if (!busy(k) && ctl[k]) ctl[k].set(s[k]);
+  for (const k of SWITCHES) if (!busy(k) && ctl[k]) ctl[k].set(s[k]);
   if (!busy('defaults') && defaultsPanel && justSaved !== 'defaults') defaultsPanel.external(s.defaults[defaultsKind]);
   content.querySelector('[data-about]').textContent = `Media Forge ${store.version || ''}`.trim();
 }

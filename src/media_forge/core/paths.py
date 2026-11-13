@@ -125,6 +125,44 @@ def atomic_write_json(path: Path, obj: object) -> None:
     atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2) + "\n")
 
 
+def copy_file_times(source: Path, target: Path) -> None:
+    """Give `target` the modified and accessed times of `source`, and on Windows its creation time as well.
+    Raises OSError when a time cannot be set."""
+    st = os.stat(source)
+    os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
+    birth = getattr(st, "st_birthtime_ns", None)
+    if sys.platform == "win32" and birth:
+        _set_creation_time(Path(target), int(birth))
+
+
+_EPOCH_AS_FILETIME = 116444736000000000  # 1970-01-01 in 100 ns ticks since 1601-01-01
+
+
+def _set_creation_time(path: Path, ns: int) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateFileW.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                                     wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.SetFileTime.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.FILETIME),
+                                     ctypes.POINTER(wintypes.FILETIME), ctypes.POINTER(wintypes.FILETIME))
+    kernel32.SetFileTime.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    ticks = max(0, ns // 100 + _EPOCH_AS_FILETIME)
+    created = wintypes.FILETIME(ticks & 0xFFFFFFFF, ticks >> 32)
+    # FILE_WRITE_ATTRIBUTES, share read / write / delete, OPEN_EXISTING
+    handle = kernel32.CreateFileW(str(path), 0x100, 0x7, None, 3, 0, None)
+    if handle is None or handle == wintypes.HANDLE(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        if not kernel32.SetFileTime(handle, ctypes.byref(created), None, None):
+            raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def replace_file(source: Path, target: Path) -> None:
     """os.replace with a short retry: Windows refuses while another process (scanner, indexer) holds the target."""
     for attempt in range(6):

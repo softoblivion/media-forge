@@ -267,6 +267,38 @@ class EngineTest(ScratchCase):
         self.assertTrue(self.engine.wait_idle(30))
         self.assertEqual(self.engine.item(items[0]["id"])["error"], "The output folder does not exist.")
 
+    def test_output_keeps_the_source_file_dates(self):
+        """keep_file_dates (default on) gives the output its source's modified, accessed and creation times."""
+        import os
+        import shutil
+
+        folder = self.out / "dated"
+        folder.mkdir(exist_ok=True)
+        for old in folder.iterdir():
+            old.unlink()
+        src = folder / "dated_photo.jpg"
+        shutil.copyfile(media("photo.jpg"), src)
+        modified = 1577934245_000000000  # 2020-01-02 03:04:05 UTC
+        os.utime(src, ns=(modified + 10**9, modified))
+        self.assertTrue(self.engine.settings.get()["keep_file_dates"])
+        self.engine.set_settings({"output_dir": str(folder)})
+        item_id = self.engine.add_files([str(src)])[0]["id"]
+        self.assertTrue(self.engine.wait_probed(30))
+        self.engine.start_items([item_id])
+        self.assertTrue(self.engine.wait_idle(60))
+        done = self.engine.item(item_id)
+        self.assertEqual(done["status"], "done", done["error"])
+        out_stat, src_stat = os.stat(done["output"]["path"]), os.stat(src)
+        self.assertEqual(out_stat.st_mtime_ns, modified)
+        if hasattr(src_stat, "st_birthtime_ns"):
+            self.assertEqual(out_stat.st_birthtime_ns, src_stat.st_birthtime_ns)
+        # off: the output carries the time it was written
+        self.engine.set_settings({"keep_file_dates": False})
+        self.engine.start_items([item_id])
+        self.assertTrue(self.engine.wait_idle(60))
+        again = self.engine.item(item_id)["output"]["path"]
+        self.assertGreater(os.stat(again).st_mtime, time.time() - 120)
+
 
 class QueueTest(unittest.TestCase):
     """The queue alone with a fake runner: order, lanes, parallelism, cancel of queued items."""
