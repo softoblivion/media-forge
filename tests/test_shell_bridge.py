@@ -406,6 +406,16 @@ class WindowTest(BridgeTestBase):
         ])
         self.assertEqual(self.bridge.ready()["window"], {"focused": False, "scales": [100]})
 
+    def test_the_applied_scale_step_is_published_with_the_fitting_steps(self):
+        self.bridge._on_window_scales([100, 125, 150], 150)
+        self.bridge._on_window_scales([100, 125, 150], 150)
+        self.bridge._on_window_scales([100, 125, 150, 175, 200], 200)
+        self.assertEqual([p for _, p in self.events("window")], [
+            {"focused": True, "scales": [100, 125, 150], "scale": 150},
+            {"focused": True, "scales": [100, 125, 150, 175, 200], "scale": 200},
+        ])
+        self.assertEqual(self.bridge.ready()["window"]["scale"], 200)
+
     def test_set_scale_saves_applies_and_refuses_a_step_that_does_not_fit(self):
         applied: list[int] = []
         self.bridge._attach_scale(applied.append)

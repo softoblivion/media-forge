@@ -7,7 +7,7 @@
 // event that follows restores the old value.
 
 import { call, on } from './api.js';
-import { store, notify, watch } from './store.js';
+import { store, notify, watch, shownScale } from './store.js';
 import { Overlay } from '../vendor/liquid_ui/js/overlay.js';
 import { gel } from '../vendor/liquid_ui/js/glass.js';
 import { Segmented, Switch, Stepper } from '../vendor/liquid_ui/js/controls.js';
@@ -42,7 +42,8 @@ export function initSettings(state, updateControl) {
   watch('scales', () => overlay.open && syncScales());
 }
 
-/** Dim the Scale steps whose minimum window does not fit this screen (store.scales, from the shell). */
+/** Dim the Scale steps whose minimum window does not fit this screen (store.scales, from the shell) and show
+ *  the step the window uses. */
 function syncScales() {
   if (!ctl.ui_scale || !content.firstElementChild) return;
   const fits = store.scales;
@@ -50,6 +51,7 @@ function syncScales() {
     const off = Array.isArray(fits) && !fits.includes(step);
     ctl.ui_scale.control.setOptionDisabled(String(step), off, off ? 'Too large for this screen' : '');
   }
+  if (!busy('ui_scale') && store.settings) ctl.ui_scale.set(shownScale(store.settings.ui_scale));
 }
 
 export function settingsOpen() {
@@ -184,7 +186,7 @@ function build() {
 
   // Scale: the shell applies the step to the window at once (set_scale) and saves it as ui_scale.
   ctl.ui_scale = mountScaleControl(content.querySelector('.set-appearance .set-card'), {
-    value: s.ui_scale,
+    value: shownScale(s.ui_scale),
     onChange: async (v) => {
       inflight.set('ui_scale', (inflight.get('ui_scale') || 0) + 1);
       try {
@@ -321,7 +323,7 @@ function exampleName(suffix) {
 function refresh(s, justSaved = null) {
   if (!content.firstElementChild) return;
   if (!busy('theme') && ctl.theme) ctl.theme.set(s.theme);
-  if (!busy('ui_scale') && ctl.ui_scale) ctl.ui_scale.set(s.ui_scale);
+  if (!busy('ui_scale') && ctl.ui_scale) ctl.ui_scale.set(shownScale(s.ui_scale));
   if (!busy('output_mode') && ctl.output_mode) ctl.output_mode.set(s.output_mode);
   const dirRow = content.querySelector('[data-row="output_dir"]');
   dirRow.hidden = s.output_mode !== 'folder';

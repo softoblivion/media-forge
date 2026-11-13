@@ -45,14 +45,31 @@ _keep_alive: list[Any] = []  # ctypes callbacks and hooks that must outlive the 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     """Options and the files to add (Open with, Send To, a file dropped on the exe); `files` are made absolute,
     since a second start hands them to a window that runs in another working folder."""
-    parser = argparse.ArgumentParser(prog="MediaForge", description="Media Forge")
+    parser = argparse.ArgumentParser(prog="MediaForge", description="Media Forge", allow_abbrev=False)
     parser.add_argument("--debug", action="store_true", help="enable WebView2 dev tools and verbose logging")
     parser.add_argument("--fake", action="store_true", help="use the stand-in engine (source tree only)")
     parser.add_argument("--ui-dir", help="serve the UI from this folder instead of the bundled one")
     parser.add_argument("files", nargs="*", help="media files or folders to add to the list")
-    args = parser.parse_intermixed_args(argv)
+    args = parser.parse_intermixed_args(_files_as_paths(sys.argv[1:] if argv is None else argv))
     args.files = [os.path.abspath(f) for f in args.files if f.strip()]
     return args
+
+
+OPTIONS = ("--debug", "--fake", "--ui-dir", "-h", "--help")
+
+
+def _files_as_paths(argv: list[str]) -> list[str]:
+    """`argv` with every argument that starts with a dash and is no option of the app made an absolute path, so a
+    file such as `-1.mp4` (Open with passes a relative name) is taken as a file instead of ending the start."""
+    out: list[str] = []
+    value_next = False
+    for arg in argv:
+        if not value_next and arg.startswith("-") and arg not in OPTIONS and arg != "--" \
+                and not arg.startswith("--ui-dir="):
+            arg = os.path.abspath(arg)
+        value_next = arg == "--ui-dir"
+        out.append(arg)
+    return out
 
 
 def project_root() -> Path:
@@ -256,7 +273,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         background_color=BACKGROUND,
     )
     bridge._attach_window(window)
-    _wire_window_events(window, bridge, engine)
+    _wire_window_events(window, bridge, engine, receiver)
 
     try:
         webview.start(
@@ -281,7 +298,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     os._exit(0)
 
 
-def _wire_window_events(window: Any, bridge: Any, engine: Any) -> None:
+def _wire_window_events(window: Any, bridge: Any, engine: Any, receiver: Any = None) -> None:
     state: dict[str, Any] = {"drop_wired": False, "native_done": False, "geometry": None}
 
     def on_shown() -> None:
@@ -306,6 +323,8 @@ def _wire_window_events(window: Any, bridge: Any, engine: Any) -> None:
             log.warning("drag and drop is not available", exc_info=True)
 
     def on_closing() -> None:
+        if receiver is not None:
+            receiver.stop()  # a later start now gets no acknowledgement and says so, instead of losing its files
         geometry = state["geometry"]
         if geometry is not None:
             geometry.save()  # a move outside a move loop (Win+Shift+Arrow, snapping) ends none: the last position
@@ -328,6 +347,26 @@ def _on_ui_thread(window: Any, fn) -> None:
     except Exception:  # noqa: BLE001
         log.debug("UI-thread invoke failed; running directly", exc_info=True)
     fn()
+
+
+def _post_to_ui(window: Any, fn) -> None:
+    """Queue `fn` on the WinForms UI thread to run after the current message; at once when that fails."""
+    def run() -> None:
+        try:
+            fn()
+        except Exception:  # noqa: BLE001 - an exception must not reach the WinForms message loop
+            log.exception("a queued window update failed")
+
+    native = getattr(window, "native", None)
+    try:
+        if native is not None:
+            from System import Action  # pythonnet
+
+            native.BeginInvoke(Action(run))
+            return
+    except Exception:  # noqa: BLE001
+        log.debug("UI-thread post failed; running directly", exc_info=True)
+    run()
 
 
 def _ui_result(window: Any, fn) -> Any:
@@ -370,6 +409,15 @@ def initial_window_args(percent: int, bounds: Optional[dict], monitors) -> dict[
             "width": int(round(w / primary)), "height": int(round(h / primary))}
 
 
+def _monitor_at(monitors, point: tuple[int, int]):
+    """(work area, DPI scale) of the monitor whose work area holds `point` (physical px), or None."""
+    x, y = point
+    for work, dpi_scale, _primary in monitors:
+        if work[0] <= x < work[2] and work[1] <= y < work[3]:
+            return work, dpi_scale
+    return None
+
+
 class WindowGeometry:
     """Size, position and Scale of the window (ARCHITECTURE.md 7): the WebView2 zoom factor plus a client size of
     logical size x zoom x DPI (the page keeps its logical layout), the stored bounds, the Scale steps that fit.
@@ -380,23 +428,42 @@ class WindowGeometry:
         self._hook = hook
         self._bridge = bridge
         self._steps = tuple(steps)
-        self.percent = 100
+        self.chosen = 100   # the Scale setting (`ui_scale`)
+        self.percent = 100  # the step applied: the chosen one, or the largest step below it that fits the monitor
 
     def _apply(self, x: int, y: int, w: int, h: int) -> None:
         self._window.native.SetBounds(x, y, w, h)
 
+    def fitted_step(self, dpi_scale: float, work: Optional[tuple[int, int, int, int]]) -> int:
+        """The largest Scale step not above the chosen one whose minimum window fits `work` at `dpi_scale`."""
+        from . import winutil
+
+        fits = [s for s in winutil.fitting_scales(self._steps, MIN_SIZE, dpi_scale, work) if s <= self.chosen]
+        return max(fits) if fits else self.chosen
+
     def start(self, percent: int, bounds: Optional[dict]) -> tuple[int, int, int, int]:
-        """The saved Scale and bounds (or the start size, centred) applied before the page shows anything."""
+        """The saved Scale and bounds (or the start size, centred) applied before the page shows anything. A Scale
+        step whose minimum window does not fit the monitor is applied as the largest step that fits; the setting
+        keeps the chosen step."""
         from . import winutil
 
         hook = self._hook
-        self.percent = max(1, int(percent))
+        self.chosen = max(1, int(percent))
+        monitors = winutil.monitors() if bounds else []
+        placed = winutil.restored_rect(bounds, monitors, self.chosen / 100.0, MIN_SIZE) if bounds else None
+        target = _monitor_at(monitors, placed[0][:2]) if placed is not None else None
+        if target is not None:
+            self.percent = self.fitted_step(target[1], target[0])
+        else:
+            self.percent = self.fitted_step(hook.scale(), hook.work_area())
+        if self.percent != self.chosen:
+            log.info("Scale %s%% does not fit this monitor; %s%% is applied", self.chosen, self.percent)
         zoom = self.percent / 100.0
         hook.zoom = zoom
         winutil.set_zoom_factor(self._window, zoom)
         rect = None
         if bounds:
-            placed = winutil.restored_rect(bounds, winutil.monitors(), zoom, MIN_SIZE)
+            placed = winutil.restored_rect(bounds, monitors, zoom, MIN_SIZE)
             if placed is not None:
                 rect, dpi_scale = placed
                 if abs(dpi_scale - hook.scale()) > 1e-3:
@@ -422,23 +489,38 @@ class WindowGeometry:
         return placed_rect
 
     def set_scale(self, percent: int) -> None:
-        """A new Scale step: the window size times the ratio of the steps around the same centre, clamped into
-        the work area, never below the minimum at the new step."""
+        """A new Scale step chosen: the window size times the ratio of the steps around the same centre, clamped
+        into the work area, never below the minimum at the new step."""
+        self.chosen = max(1, int(percent))
+        if self._rescale(self.chosen):
+            self.save()
+        self.publish_scales()
+
+    def on_display(self) -> None:
+        """Another monitor, DPI or work area: the largest fitting step not above the chosen one is applied (the
+        chosen step comes back once it fits again), and the fitting steps are published."""
+        step = self.fitted_step(self._hook.scale(), self._hook.work_area())
+        if step != self.percent:
+            log.info("Scale %s%% applied as %s%% on this monitor", self.chosen, step)
+            self._rescale(step)
+        self.publish_scales()
+
+    def _rescale(self, percent: int) -> bool:
+        """Apply the step `percent`; False when the window is minimized or gone (only the zoom changed)."""
         from . import winutil
 
         hook = self._hook
-        new_percent = max(1, int(percent))
-        old_zoom, zoom = self.percent / 100.0, new_percent / 100.0
-        self.percent = new_percent
+        old_zoom, zoom = self.percent / 100.0, percent / 100.0
+        self.percent = percent
         hook.zoom = zoom
         winutil.set_zoom_factor(self._window, zoom)
         current = hook.client_rect()
         if current is None or hook.is_minimized():
-            return
+            return False
         rect = winutil.rescaled_rect(current, zoom / old_zoom, hook.work_area(), hook.min_client(zoom))
         hook.place(rect, self._apply)
         log.info("window %s at %s%%", hook.client_rect(), self.percent)
-        self.save()
+        return True
 
     def fitting_scales(self) -> list[int]:
         from . import winutil
@@ -446,7 +528,7 @@ class WindowGeometry:
         return winutil.fitting_scales(self._steps, MIN_SIZE, self._hook.scale(), self._hook.work_area())
 
     def publish_scales(self) -> None:
-        self._bridge._on_window_scales(self.fitting_scales())
+        self._bridge._on_window_scales(self.fitting_scales(), self.percent)
 
     def save(self) -> None:
         """Store the bounds (`window_bounds`) of the restored window."""
@@ -482,7 +564,8 @@ def _setup_native_window(window: Any, bridge: Any) -> Optional[WindowGeometry]:
             bridge._attach_drag(lambda part: _ui_result(window, lambda: hook.begin_drag(part)))
             geometry.start(*window_settings(bridge._engine))  # its `window` event carries `drag` and `scales`
             hook.on_size_end = geometry.save
-            hook.on_display = geometry.publish_scales
+            # after the message that reported the change: the refit resizes the window and sets the zoom
+            hook.on_display = lambda: _post_to_ui(window, geometry.on_display)
         else:
             log.warning("window hook was not installed")
     except Exception:  # noqa: BLE001

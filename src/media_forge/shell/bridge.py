@@ -390,6 +390,7 @@ class Bridge:
         self._scale_applier: Optional[Callable[[int], None]] = None
         self._drag_starter: Optional[Callable[[str], bool]] = None
         self._scales: Optional[list[int]] = None  # the Scale steps whose minimum window fits; None = not known yet
+        self._applied_scale: Optional[int] = None  # the Scale step applied to the window; None = not known yet
         self._shut_down = False
 
     # -- wiring (underscore names are not exposed to JS)
@@ -448,14 +449,17 @@ class Bridge:
             self._focused = focused
         self._emit("window", self._window_state())
 
-    def _on_window_scales(self, scales: list[int]) -> None:
+    def _on_window_scales(self, scales: list[int], applied: Optional[int] = None) -> None:
         """The Scale steps that fit the window's monitor now (at start, after a move to another monitor, after a
-        change of the displays); the page dims the others."""
+        change of the displays; the page dims the others) and the step applied to the window, which is below the
+        `ui_scale` setting while that one does not fit (the page shows the applied step)."""
         scales = sorted({int(s) for s in scales})
+        applied = int(applied) if applied is not None else None
         with self._lock:
-            if scales == self._scales:
+            if scales == self._scales and applied == self._applied_scale:
                 return
             self._scales = scales
+            self._applied_scale = applied
         self._emit("window", self._window_state())
 
     def _window_state(self) -> dict:
@@ -465,6 +469,8 @@ class Bridge:
                 state["drag"] = True  # the page hands title-bar and top-edge presses to window_drag_start
             if self._scales is not None:
                 state["scales"] = list(self._scales)
+            if self._applied_scale is not None:
+                state["scale"] = self._applied_scale
         return state
 
     def _save_window_bounds(self, bounds: dict) -> None:

@@ -8,6 +8,8 @@
 //   update       js/main.js      (the kit's update control, onStatus of the update event)
 //   scales       js/main.js      (WindowState.scales of State and the window event: the Scale steps
 //                                 that fit the screen; null while the shell has not said)
+//   scale        js/main.js      (WindowState.scale: the Scale step applied to the window, below
+//                                 settings.ui_scale while that one does not fit; null while unknown)
 
 export const store = {
   version: '',
@@ -16,6 +18,7 @@ export const store = {
   options: null,
   update: null,
   scales: null,
+  scale: null,
   items: new Map(), // id -> Item, in list order
 };
 
@@ -38,6 +41,14 @@ export function notify(key, detail) {
       console.error(`[ui] store watcher for "${key}" failed`, err);
     }
   }
+}
+
+/** The Scale step the Settings sheet shows for the saved step `saved`: the step applied to the window, which is
+ *  below the saved one while that one does not fit this screen (the saved step comes back when it fits again). */
+export function shownScale(saved) {
+  const fits = store.scales;
+  if (!Array.isArray(fits) || fits.includes(saved) || !Number.isInteger(store.scale)) return saved;
+  return store.scale;
 }
 
 /** The option list of a kind's formats. */

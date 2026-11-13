@@ -39,6 +39,31 @@ class MainHelpersTest(unittest.TestCase):
         self.assertTrue(args.debug)
         self.assertEqual(args.files, [os.path.abspath("clip one.mp4"), "C:\\media\\photo.jpg"])
 
+    def test_a_file_whose_name_starts_with_a_dash_is_a_file(self):
+        args = main.parse_args(["-1.mp4", "--debug", "-h.jpg", "--fake", "--ui-dir", "C:\\ui", "--deb"])
+        self.assertTrue(args.debug and args.fake)
+        self.assertEqual(args.ui_dir, "C:\\ui")
+        self.assertEqual(args.files, [os.path.abspath("-1.mp4"), os.path.abspath("-h.jpg"), os.path.abspath("--deb")])
+
+    def test_closing_the_window_stops_the_hand_over_first(self):
+        class Event:
+            def __init__(self):
+                self.handlers = []
+
+            def __iadd__(self, handler):
+                self.handlers.append(handler)
+                return self
+
+        order = []
+        window = type("Window", (), {})()
+        window.events = type("Events", (), {})()
+        window.events.shown, window.events.loaded, window.events.closing = Event(), Event(), Event()
+        bridge = mock.Mock(_shutdown=lambda: order.append("shutdown"))
+        receiver = mock.Mock(stop=lambda: order.append("receiver"))
+        main._wire_window_events(window, bridge, None, receiver)
+        window.events.closing.handlers[0]()
+        self.assertEqual(order, ["receiver", "shutdown"])
+
     def test_ui_dir(self):
         self.assertEqual(main.resolve_ui_dir(), Path(main.__file__).resolve().parents[1] / "ui")
         self.assertEqual(main.resolve_ui_dir("C:\\x\\ui"), Path("C:\\x\\ui").resolve())
@@ -153,6 +178,7 @@ class FakeHook:
         self.zoom = 1.0
         self.minimized = False
         self.minimum = main.MIN_SIZE
+        self.work = (0, 0, 1920, 1032)
 
     def client_rect(self):
         return self.rect
@@ -161,7 +187,7 @@ class FakeHook:
         return 1.0
 
     def work_area(self):
-        return (0, 0, 1920, 1032)
+        return self.work
 
     def min_client(self, zoom=None):
         z = self.zoom if zoom is None else zoom
@@ -180,10 +206,12 @@ class FakeHook:
 class FakeBridge:
     def __init__(self):
         self.scales: list = []
+        self.applied: list = []
         self.saved: list = []
 
-    def _on_window_scales(self, scales):
+    def _on_window_scales(self, scales, applied=None):
         self.scales.append(list(scales))
+        self.applied.append(applied)
 
     def _save_window_bounds(self, bounds):
         self.saved.append(bounds)
@@ -226,6 +254,48 @@ class WindowGeometryTest(unittest.TestCase):
         self.geometry.set_scale(150)
         self.assertEqual(self.hook.rect, (640, 70, 720, 960))
         self.assertEqual(self.bridge.saved[-1], {"x": 640, "y": 70, "width": 480, "height": 640})  # same logical size
+
+    def test_a_stored_step_that_does_not_fit_starts_as_the_largest_that_does(self):
+        # Scale 200 % chosen on a large monitor; this one (1920 x 1032 work area at 96 dpi) fits 150 % at most.
+        with mock.patch("media_forge.shell.winutil.monitors", return_value=[]):
+            self.geometry.start(200, None)
+        self.assertEqual((self.geometry.chosen, self.geometry.percent), (200, 150))
+        self.assertEqual(self.control.ZoomFactor, 1.5)
+        self.assertLessEqual(self.hook.rect[3], 1032)
+        self.assertEqual(self.bridge.applied, [150])
+        self.assertEqual(self.bridge.saved, [])          # neither the setting nor the bounds are written
+
+    def test_stored_bounds_at_a_step_that_does_not_fit_open_inside_the_work_area(self):
+        monitors = [((0, 0, 1920, 1032), 1.0, True)]
+        with mock.patch("media_forge.shell.winutil.monitors", return_value=monitors):
+            self.geometry.start(200, {"x": 300, "y": 10, "width": 640, "height": 800})
+        self.assertEqual(self.geometry.percent, 150)
+        self.assertEqual(self.hook.rect, (300, 0, 960, 1032))
+        self.assertEqual(self.hook.zoom, 1.5)
+
+    def test_the_monitor_of_the_stored_bounds_decides_the_step(self):
+        big = ((1920, 0, 4480, 1400), 1.0, False)       # 2560 x 1400 at 96 dpi: 200 % fits (1280 <= 1400)
+        monitors = [((0, 0, 1920, 1032), 1.0, True), big]
+        with mock.patch("media_forge.shell.winutil.monitors", return_value=monitors):
+            self.geometry.start(200, {"x": 2000, "y": 20, "width": 640, "height": 660})
+        self.assertEqual(self.geometry.percent, 200)
+
+    def test_a_display_change_refits_the_step_and_brings_the_chosen_one_back(self):
+        self.hook.work = (0, 0, 2560, 1400)
+        with mock.patch("media_forge.shell.winutil.monitors", return_value=[]):
+            self.geometry.start(200, None)
+        self.assertEqual(self.geometry.percent, 200)
+        self.hook.work = (0, 0, 1920, 1032)               # moved to a smaller monitor
+        self.geometry.on_display()
+        self.assertEqual((self.geometry.chosen, self.geometry.percent), (200, 150))
+        self.assertEqual(self.control.ZoomFactor, 1.5)
+        x, y, w, h = self.hook.rect
+        self.assertTrue(y >= 0 and y + h <= 1032 and x + w <= 1920, self.hook.rect)
+        self.hook.work = (0, 0, 2560, 1400)               # and back
+        self.geometry.on_display()
+        self.assertEqual(self.geometry.percent, 200)
+        self.assertEqual(self.bridge.applied[-3:], [200, 150, 200])
+        self.assertEqual(self.bridge.saved, [])
 
     def test_scale_change_while_minimized_only_zooms(self):
         self.hook.minimized = True

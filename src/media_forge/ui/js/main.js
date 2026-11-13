@@ -235,6 +235,7 @@ async function boot() {
     setWindowDrag(w.drag === true);
     if (Array.isArray(w.scales)) {
       store.scales = w.scales;
+      if (Number.isInteger(w.scale)) store.scale = w.scale;
       notify('scales', w.scales);
     }
   };
