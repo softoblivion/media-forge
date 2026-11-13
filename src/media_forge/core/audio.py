@@ -20,12 +20,31 @@ CODEC_ARGS = {
     "opus": ["-c:a", "libopus"],
     "ogg": ["-c:a", "libvorbis"],
     "flac": ["-c:a", "flac", "-compression_level", "8"],
-    "wav": ["-c:a", "pcm_s16le"],
-}
+}  # wav: `wav_codec` picks the PCM codec from the source depth
 MUXERS = {"mp3": "mp3", "m4a": "ipod", "opus": "opus", "ogg": "ogg", "flac": "flac", "wav": "wav"}
 LOUDNORM = "loudnorm=I=-16:TP=-1.5:LRA=11"
 SIZE_MARGIN = 0.97
 MIN_KBPS = 64
+
+
+def wav_codec(info: ProbeInfo) -> str:
+    """The PCM codec that keeps the source's sample depth: float PCM stays float (32 or 64 bit), a lossless integer
+    source keeps 24 or 32 bits; 16-bit and lossy sources (their decoders report no depth) give 16-bit."""
+    codec = str(info.acodec or "")
+    if codec.startswith("pcm_f") or (codec.startswith("pcm_") and info.audio_sample_fmt in ("flt", "dbl")):
+        return "pcm_f64le" if "64" in codec or info.audio_sample_fmt == "dbl" else "pcm_f32le"
+    bits = info.audio_bits or 0
+    if bits > 24:
+        return "pcm_s32le"
+    if bits > 16:
+        return "pcm_s24le"
+    return "pcm_s16le"
+
+
+def codec_args(fmt: str, info: ProbeInfo) -> list[str]:
+    if fmt == "wav":
+        return ["-c:a", wav_codec(info)]
+    return list(CODEC_ARGS[fmt])
 
 
 def size_limited_kbps(limit_mb: float, duration: float, fmt: str) -> tuple[int, str | None]:
@@ -93,7 +112,7 @@ def plan_audio(src: Path, info: ProbeInfo, settings: Mapping[str, Any], ffmpeg: 
         args += ["-ar", str(out_rate)]
     if settings.get("channels", "keep") != "keep":
         args += ["-ac", str(settings["channels"])]
-    args += CODEC_ARGS[fmt]
+    args += codec_args(fmt, info)
     if kbps is not None:
         args += ["-b:a", f"{kbps}k"]
         if fmt == "opus" and limit is not None:

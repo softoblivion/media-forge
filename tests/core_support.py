@@ -98,6 +98,12 @@ def _make(name: str, path: Path) -> None:
         _ff("-display_rotation", "90", "-i", str(tmp), "-c", "copy", str(path))
     elif name == "tone.wav":
         _ff("-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-c:a", "pcm_s16le", str(path))
+    elif name in ("tone24.wav", "tone32.wav", "tone_f32.wav"):  # high-depth PCM sources
+        codec = {"tone24.wav": "pcm_s24le", "tone32.wav": "pcm_s32le", "tone_f32.wav": "pcm_f32le"}[name]
+        _ff("-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:a", codec, str(path))
+    elif name == "tone24.flac":
+        _ff("-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:a", "flac", "-sample_fmt", "s32",
+            "-bits_per_raw_sample", "24", str(path))
     elif name == "tone.mp3":
         _ff("-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-c:a", "libmp3lame", "-b:a", "192k",
             "-metadata", "title=Tone", str(path))

@@ -45,7 +45,7 @@ The gear in the title bar opens the settings sheet.
 |---|---|---|
 | Video | MP4, MKV, WebM, MOV, GIF; audio extraction to MP3, M4A, Opus, FLAC, WAV | H.264, H.265 / HEVC, AV1 (CPU or NVENC), VP9, ProRes, stream copy; scale original / 2x / 4x / fit 1080p, 720p, 480p; frame rate keep / 24 / 30 / 60; audio keep / AAC 96 to 320 kbps / none; GIF is capped at 15 fps |
 | Photo | JPEG, PNG, WebP, AVIF, TIFF, BMP, HEIC | quality 0 to 100 for the lossy formats (PNG is optimised instead); scale original / 2x / 4x / ½ / ¼ |
-| Audio | MP3, M4A (AAC), Opus, OGG (Vorbis), FLAC, WAV | 64 to 320 kbps (Opus up to 256; FLAC and WAV are lossless); sample rate keep / 44.1 / 48 kHz; mono / stereo; loudness normalisation to -16 LUFS |
+| Audio | MP3, M4A (AAC), Opus, OGG (Vorbis), FLAC, WAV | 64 to 320 kbps (Opus up to 256; FLAC and WAV are lossless, and WAV keeps the source's 16-bit, 24-bit, 32-bit or floating-point samples); sample rate keep / 44.1 / 48 kHz; mono / stereo; loudness normalisation to -16 LUFS |
 
 Upscale methods for 2x / 4x: **Lanczos** (resampling with a light sharpen), **FSRCNN** (small deterministic
 super-resolution network, bundled) and, for photos, **EDSR** (larger network, downloaded once, 38 MB per scale,

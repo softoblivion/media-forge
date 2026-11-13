@@ -63,6 +63,8 @@ class ProbeInfo:
     pix_fmt: str | None = None
     rotation: int = 0
     audio_bitrate: int | None = None
+    audio_sample_fmt: str | None = None   # ffprobe `sample_fmt` of the first audio stream (s16, s32, flt, fltp, ...)
+    audio_bits: int | None = None         # bits per sample of a lossless source (24 for pcm_s24le / 24-bit FLAC)
     image_mode: str | None = None
     has_alpha: bool = False
     n_frames: int = 1
@@ -182,6 +184,13 @@ def info_from_ffprobe(data: dict, size: int) -> ProbeInfo | None:
         info.sample_rate = _num(a.get("sample_rate"), int)
         info.channels = _num(a.get("channels"), int)
         info.audio_bitrate = _num(a.get("bit_rate"), int)
+        info.audio_sample_fmt = a.get("sample_fmt")
+        # bits_per_raw_sample is set by lossless decoders (FLAC, PCM); bits_per_sample is the PCM container's width.
+        # Lossy decoders report neither (0 or absent).
+        bits = _num(a.get("bits_per_raw_sample"), int) or 0
+        if not bits and str(info.acodec or "").startswith("pcm_"):
+            bits = _num(a.get("bits_per_sample"), int) or 0
+        info.audio_bits = bits or None
         if info.duration is None:
             info.duration = _num(a.get("duration"))
     if info.duration is not None:

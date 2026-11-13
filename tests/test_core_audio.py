@@ -45,6 +45,17 @@ class AudioTest(ScratchCase):
                 if fmt == "opus":
                     self.assertEqual(data["streams"][0]["sample_rate"], "48000")
 
+    def test_wav_keeps_the_source_sample_depth(self):
+        """WAV is lossless: the PCM codec follows the source depth; a lossy source is written as 16-bit."""
+        expected = {"tone24.wav": "pcm_s24le", "tone32.wav": "pcm_s32le", "tone_f32.wav": "pcm_f32le",
+                    "tone24.flac": "pcm_s24le", "tone.wav": "pcm_s16le", "tone.mp3": "pcm_s16le"}
+        for src, codec in expected.items():
+            with self.subTest(src=src):
+                out, _, _ = self.run_job(src, f"depth_{src.replace('.', '_')}.wav", format="wav")
+                self.assertEqual(ffprobe(out)["streams"][0]["codec_name"], codec)
+        out, _, _ = self.run_job("tone24.wav", "depth24.flac", format="flac")
+        self.assertEqual(ffprobe(out)["streams"][0].get("bits_per_raw_sample"), "24")
+
     def test_metadata_kept_when_strip_off(self):
         out, _, _ = self.run_job("tone.mp3", "tagged.mp3", strip_metadata=False)
         tags = {k.lower(): v for k, v in ffprobe(out)["format"].get("tags", {}).items()}
