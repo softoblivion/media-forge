@@ -24,7 +24,7 @@ def unique_pipe() -> str:
 
 class MessageTest(unittest.TestCase):
     def test_round_trip_keeps_non_ascii_paths(self):
-        paths = ["C:\\Видео\\clip 1.mp4", "D:\\photos\\é.jpg"]
+        paths = ["C:\\Βίντεο\\clip 1.mp4", "D:\\photos\\é.jpg"]
         self.assertEqual(instance.decode(instance.encode(paths)), paths)
 
     def test_blank_entries_are_dropped(self):

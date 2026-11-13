@@ -1,5 +1,5 @@
 @echo off
-rem Run Media Forge from source with dev tools: run_dev.bat [--fake] [--ui-dir PATH]
+rem Run Media Forge from source with dev tools: run_dev.bat [--fake] [--ui-dir PATH] [FILE_OR_FOLDER ...]
 rem Set MEDIA_FORGE_HOME to a scratch folder first; without it the data goes to media-forge_data\ in the project root.
 rem Needs .venv (run build\build.ps1 -SkipBuild once); falls back to "py -3.14" when it is missing.
 setlocal

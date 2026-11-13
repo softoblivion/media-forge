@@ -20,6 +20,15 @@ Files and folders also reach the list from Explorer: **Open with** > Media Forge
 `MediaForge.exe` in the `shell:sendto` folder), or a file dropped on `MediaForge.exe` itself. While Media Forge is
 open, such a start adds its files to the open window instead of opening a second one.
 
+## The window
+
+Drag any edge or corner to resize the window, the title bar to move it. A taller window shows more files at once;
+a wider one widens the list up to a comfortable reading width and keeps it centred beyond that. The window cannot
+get smaller than its smallest layout and is never maximized or made full screen (minimize and close stay). Its size
+and position are remembered and restored at the next start; when the screen it was on is no longer connected, it
+opens centred on the main screen. Moving it to a screen with another display scaling keeps its size and keeps the
+text sharp.
+
 ## Keyboard
 
 | Shortcut | Action |
@@ -36,7 +45,7 @@ The gear in the title bar opens the settings sheet.
 | Setting | Meaning |
 |---|---|
 | **Theme** | Dusk, Nova (default), Frost or Bloom: the background colour family and the accent of the window. |
-| **Scale** | 100 (default), 125, 150, 175 or 200 %: the size of the whole window and its text, on top of the Windows display scaling. The window grows with the step; on a small screen it keeps a layout step that still fits. |
+| **Scale** | 100 (default), 125, 150, 175 or 200 %: the size of the whole window and its text, on top of the Windows display scaling. A change resizes the window by the same ratio around its centre, so its proportions stay; a step whose smallest window does not fit the screen is dimmed. |
 | **Output** | Next to the source (`<name>_forge.<ext>`) or one folder of your choice. |
 | **Suffix** | The part added to the file name, `_forge` by default; may be empty when outputs go to a folder. |
 | **Keep file dates** | On by default: each output gets the modified and created dates of its source, so files sorted by date stay in order. Off: the output carries the time it was written. |

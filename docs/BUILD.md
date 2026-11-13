@@ -29,7 +29,7 @@ put `src` on `PYTHONPATH`.
 ```powershell
 powershell -ExecutionPolicy Bypass -File build\build.ps1 -SkipBuild    # creates .venv and installs both requirements files
 $env:MEDIA_FORGE_HOME = "$env:TEMP\media_forge_scratch"
-scripts\run_dev.bat [--fake] [--ui-dir PATH]
+scripts\run_dev.bat [--fake] [--ui-dir PATH] [FILE_OR_FOLDER ...]
 ```
 
 `scripts\run_dev.bat` sets `PYTHONPATH=src` and runs `.venv\Scripts\python -m media_forge.shell.main --debug %*`
@@ -40,6 +40,8 @@ scripts\run_dev.bat [--fake] [--ui-dir PATH]
 - `--fake`: the stand-in engine of `tests\shell_fake_engine.py` instead of `media_forge.core.engine.Engine`
   (simulated probing and progress, nothing read or written). Source tree only; the exe does not contain it.
 - `--ui-dir PATH`: serve the UI from another folder (a folder with an `index.html`).
+- `FILE_OR_FOLDER ...`: added to the list at start, as from Explorer; with an instance already running they are
+  handed to it and the second start ends.
 
 The window loads `ui\index.html` through pywebview's local HTTP server on `http://127.0.0.1:<port>/`, the first free
 port from 42101 to 42140, so the page origin and its `localStorage` stay the same between launches. Logs:
@@ -65,16 +67,18 @@ $env:PYTHONPATH = "src"
 .venv\Scripts\python -m unittest discover -s tests -t . -p "test_shell_*.py"     # shell only
 ```
 
-Shell tests never open a window:
+Shell tests open no app window (the window-procedure test in `test_shell_winutil.py` uses a hidden plain Win32
+window and is skipped off Windows):
 
 | File | Covers |
 |---|---|
 | `test_shell_events.py` | `EventPump`: nothing before `ready()`, `item` coalesced per id keeping its place, other events in order, `item_removed` drops a pending `item`, `items_added` goes before pending updates of its items, threaded delivery, JS escaping (`js_literal`, U+2028 / U+2029) |
-| `test_shell_bridge.py` | public names = exactly the bridge methods the page calls (and the parameter names pywebview sees), delegation to the engine, argument checks, error sentences, settings refusals (3.5 sentences, settings re-sent), dialogs and their filters, minimize / close, focus events, shutdown, the drop listener, self-update wiring (check, download, apply closes the window, auto download, settings changes leave the scheduler alone) |
-| `test_shell_drop.py` | `pywebviewFullPath` extraction, one-level folder expansion to media files, the extension table against the core's `detect_kind` |
+| `test_shell_bridge.py` | public names = exactly the bridge methods the page calls (and the parameter names pywebview sees), delegation to the engine, argument checks, error sentences, settings refusals (3.5 sentences, settings re-sent), dialogs and their filters, minimize / close, native window drag, Scale and window bounds, focus events, shutdown, the drop listener, self-update wiring (check, download, apply closes the window, auto download, settings changes leave the scheduler alone) |
+| `test_shell_drop.py` | `pywebviewFullPath` extraction, folder expansion with subfolders to media files (junctions not followed), the extension table against the core's `detect_kind` |
+| `test_shell_instance.py` | hand-over of a second start's files: message format, pipe receiver, sender |
 | `test_shell_selfupdate.py` | the `core\selfupdate.py` adapter: repository, asset, names, environment variable, exe path when frozen, scheduler, `--apply-update` routed before the mutex |
-| `test_shell_winutil.py` | size ladder against work areas, centring, the DWM border `COLORREF`, the hook and DWM helpers without a window, no resize code left |
-| `test_shell_main.py` | arguments, UI folder (source and frozen), port range, data paths, single instance |
+| `test_shell_winutil.py` | first-start size ladder, clamping into a work area, the minimum and the fitting steps per Scale, the Scale ratio arithmetic, restoring onto present and missing monitors, the DWM border `COLORREF`, the helpers without a window; on a live hidden window: sizing frame insets, the minimum, no maximize, a DPI change keeping the logical size |
+| `test_shell_main.py` | arguments and file arguments, UI folder (source and frozen), port range, data paths, single instance and the second start's hand-over, window settings read safely, window geometry (first start, restore, Scale change, minimized window) |
 
 `tests\shell_fake_engine.py` is the stand-in engine used by these tests and by `--fake`.
 
@@ -122,25 +126,31 @@ must run from the same path, `MediaForge.exe.old` must be gone within about 15 s
 
 ## 6. Window notes
 
-- Fixed size: `create_window(resizable=False, frameless=True)`; pywebview first makes the form
-  `FixedSingle` and then borderless, which keeps the client size and leaves a 614 x 801 window at 96 dpi, so the
-  shell sets the real size itself after the form is shown.
-- `shell\winutil.FixedSizeHook` subclasses the window procedure: `WM_WINDOWPOSCHANGING` replaces every size of
-  the restored window with the locked one (a `SetWindowPos` from another program cannot resize it),
-  `SC_MAXIMIZE` is swallowed, a `SIZE_MAXIMIZED` that still arrives (`ShowWindow(SW_MAXIMIZE)` from outside) is
-  undone with `SC_RESTORE`, `WS_MAXIMIZEBOX` / `WS_THICKFRAME` are cleared and `WS_MINIMIZEBOX` is set (taskbar
-  click minimizes). Without these, the borderless form keeps the `WS_MAXIMIZEBOX` bit and fills the work area on
-  `SC_MAXIMIZE` (measured with pywebview 6.2.1).
-- Size: the first of 630 x 840, 600 x 800, 570 x 760, 540 x 720 logical px (`main.SIZE_LADDER`) that fits the
-  monitor work area at the window's DPI, centred. The process is system-DPI aware (pywebview calls
-  `SetProcessDPIAware`), so the window gets no `WM_DPICHANGED`.
+- The form: `create_window(frameless=True, resizable=False)`; pywebview's own resizing stays off and
+  `shell\winutil.WindowHook` (a window-procedure subclass) makes the window resizable after the form is shown.
+- Edges: the hook adds `WS_THICKFRAME`, and its `WM_NCCALCSIZE` keeps the system's sizing border on the left, right
+  and bottom (invisible, outside the visible window, with the system resize cursors) and drops it at the top, so
+  the page reaches the top edge. The top edge, its two corners and the title bar call `window_drag_start`, which
+  posts `WM_NCLBUTTONDOWN` with the matching hit-test code: the system's own sizing and move loops, exact at every
+  Scale and DPI. pywebview's JavaScript drag (`window.move` from `screenX - clientX`) is not used: it is off by the
+  zoom factor at a Scale above 100 %.
+- Minimum: 480 x 640 logical px times the Scale factor and the monitor's DPI scale, held in `WM_GETMINMAXINFO` and
+  `WM_WINDOWPOSCHANGING` (a `SetWindowPos` from another program cannot go below it). The restore after a minimize
+  keeps the window size, which WinForms would otherwise replace with its client size.
+- No maximize: `WS_MAXIMIZEBOX` stays cleared (also when WinForms restyles the form, `WM_STYLECHANGING`),
+  `SC_MAXIMIZE` and non-client double clicks are swallowed, a `SIZE_MAXIMIZED` that still arrives
+  (`ShowWindow(SW_MAXIMIZE)` from outside) is undone with `SC_RESTORE`; `WS_MINIMIZEBOX` is set (taskbar click
+  minimizes). Without the hook the borderless form keeps `WS_MAXIMIZEBOX` and fills the work area on `SC_MAXIMIZE`
+  (pywebview 6.2.1).
+- Size and place: `window_bounds` in the settings (client top-left in physical px, size in logical px), saved at the
+  end of a move or resize, after a Scale change and at close, restored clamped into a connected monitor's work
+  area. The first start takes the first of 630 x 840 ... 480 x 640 logical px (`main.SIZE_LADDER`) that fits the
+  work area, centred.
+- DPI: the process sets per-monitor DPI awareness (v2) before any window exists; on `WM_DPICHANGED` the hook
+  multiplies the client size by the ratio of the DPIs, so the logical size stays and WebView2 renders at the new
+  density.
 - DWM: rounded corners (`DWMWA_WINDOW_CORNER_PREFERENCE`) and the border colour `DWMWA_BORDER_COLOR` = the page
   background `#04070f`, so the light Windows 11 frame line is gone; the page covers the whole client area.
-- Drag regions (`pywebview-drag-region`) move the window from JavaScript (`window.move`, no size change); a
-  double-click there is a plain DOM event and never maximizes.
-- Checked with a CDP launcher and a Win32 probe (`GetWindowRect`): start 630 x 840, `SetWindowPos` to 1000 x 600
-  stays 630 x 840, `SC_MAXIMIZE` / `ShowWindow(SW_MAXIMIZE)` / double-click on the title bar change nothing, six
-  minimize / restore cycles keep 630 x 840, the top screen row of the window is `#04070f`.
 
 ## 7. Troubleshooting
 
