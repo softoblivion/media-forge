@@ -167,10 +167,14 @@ class Settings:
         self.paths = paths
         self.persist = persist
         self._lock = threading.RLock()
+        # Serialises whole saves (snapshot + write): without it a slow write of an older snapshot could land after
+        # a newer one, and two writers would share the one `.part` file. Lock order: `_save_lock`, then `_lock`.
+        self._save_lock = threading.Lock()
         self._data = default_settings()
 
     def load(self) -> dict[str, Any]:
         path = self.paths.settings_file
+        broken = False
         with self._lock:
             if not path.exists():
                 self._data = default_settings()
@@ -187,19 +191,22 @@ class Settings:
                 except OSError:
                     pass
                 self._data = default_settings()
-                self.save()
-            return self.get()
+                broken = True
+        if broken:
+            self.save()  # outside `_lock`: save takes `_save_lock` first
+        return self.get()
 
     def save(self) -> None:
         if not self.persist:
             return
-        with self._lock:
-            data = copy.deepcopy(self._data)
-        data["version"] = SCHEMA_VERSION
-        try:
-            atomic_write_json(self.paths.settings_file, data)
-        except OSError:
-            log.exception("settings.json could not be written")
+        with self._save_lock:
+            with self._lock:
+                data = copy.deepcopy(self._data)
+            data["version"] = SCHEMA_VERSION
+            try:
+                atomic_write_json(self.paths.settings_file, data)
+            except OSError:
+                log.exception("settings.json could not be written")
 
     def get(self) -> dict[str, Any]:
         with self._lock:

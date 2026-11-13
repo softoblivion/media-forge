@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 import unittest
+from unittest import mock
 
 from media_forge.core import catalog
+from media_forge.core import settings as settings_mod
 from media_forge.core.errors import UserError
 from media_forge.core.paths import AppPaths
 from media_forge.core.settings import Settings, default_settings
@@ -20,6 +24,35 @@ class SettingsTest(ScratchCase):
         if paths.settings_file.exists():
             paths.settings_file.unlink()
         return Settings(paths)
+
+    def test_concurrent_saves_keep_the_newest_values(self):
+        """A save that writes slowly cannot overwrite a newer patch saved meanwhile."""
+        s = self.fresh("save_race")
+        s.load()
+        first_started, release = threading.Event(), threading.Event()
+        calls = []
+        real_write = settings_mod.atomic_write_json
+
+        def slow_write(path, data):
+            calls.append(data["parallel_jobs"])
+            if len(calls) == 1:
+                first_started.set()
+                release.wait(5)
+            real_write(path, data)
+
+        with mock.patch.object(settings_mod, "atomic_write_json", slow_write):
+            a = threading.Thread(target=s.patch, args=({"parallel_jobs": 2},))
+            a.start()
+            self.assertTrue(first_started.wait(5))
+            b = threading.Thread(target=s.patch, args=({"parallel_jobs": 3},))
+            b.start()
+            time.sleep(0.3)
+            release.set()
+            a.join(5)
+            b.join(5)
+        raw = json.loads(s.paths.settings_file.read_text(encoding="utf-8"))
+        self.assertEqual(raw["parallel_jobs"], 3)
+        self.assertEqual(Settings(s.paths).load()["parallel_jobs"], 3)
 
     def test_defaults(self):
         s = self.fresh("defaults")
