@@ -1,4 +1,4 @@
-"""Drop-path handling: pywebviewFullPath extraction and one-level folder expansion to media files."""
+"""Drop-path handling: pywebviewFullPath extraction and folder expansion (with sub-folders) to media files."""
 
 from __future__ import annotations
 
@@ -83,26 +83,44 @@ class ExpandPathsTest(unittest.TestCase):
 
     def test_files_pass_through_in_order(self):
         a, b = self.touch("b.mp4"), self.touch("a.txt")
-        self.assertEqual(expand_paths([a, b]), [a, b])
+        self.assertEqual(expand_paths([a, b]), [(a, ""), (b, "")])
 
-    def test_folder_expanded_one_level_media_only_sorted(self):
+    def test_folder_expanded_with_subfolders_media_only_sorted(self):
         self.touch("f/Zeta.MOV")
         self.touch("f/alpha.jpg")
         self.touch("f/beta.Mp3")
         self.touch("f/notes.txt")
         self.touch("f/sub/deep.mp4")
-        (self.tmp / "f" / "folder.mp4").mkdir()  # a folder named like a media file is skipped
-        result = [os.path.basename(p) for p in expand_paths([str(self.tmp / "f")])]
-        self.assertEqual(result, ["alpha.jpg", "beta.Mp3", "Zeta.MOV"])
+        self.touch("f/sub/inner/deeper.flac")
+        self.touch("f/sub/inner/readme.txt")
+        self.touch("f/Another/z.png")
+        (self.tmp / "f" / "empty").mkdir()
+        (self.tmp / "f" / "folder.mp4").mkdir()  # a folder named like a media file is a folder
+        result = [(os.path.basename(p), rel) for p, rel in expand_paths([str(self.tmp / "f")])]
+        self.assertEqual(result, [
+            ("alpha.jpg", ""), ("beta.Mp3", ""), ("Zeta.MOV", ""),  # the folder's own files first
+            ("z.png", "Another"),
+            ("deep.mp4", "sub"), ("deeper.flac", os.path.join("sub", "inner")),
+        ])
+
+    @unittest.skipUnless(os.name == "nt", "junctions are a Windows feature")
+    def test_junction_is_not_followed(self):
+        import _winapi
+
+        a = self.touch("f/a.mp4")
+        self.touch("f/sub/b.mp4")
+        _winapi.CreateJunction(str(self.tmp / "f"), str(self.tmp / "f" / "sub" / "loop"))  # a loop back up
+        result = expand_paths([str(self.tmp / "f")])
+        self.assertEqual([p for p, _ in result], [a, str(self.tmp / "f" / "sub" / "b.mp4")])
 
     def test_duplicates_dropped(self):
         a = self.touch("f/a.mp4")
         result = expand_paths([a, str(self.tmp / "f"), a.upper() if os.name == "nt" else a])
-        self.assertEqual(result, [a])
+        self.assertEqual(result, [(a, "")])
 
     def test_missing_and_invalid_entries(self):
         missing = str(self.tmp / "gone.mp4")
-        self.assertEqual(expand_paths([missing, "", "  ", None, 5]), [missing])
+        self.assertEqual(expand_paths([missing, "", "  ", None, 5]), [(missing, "")])
 
     def test_empty_folder(self):
         (self.tmp / "empty").mkdir()
@@ -110,7 +128,7 @@ class ExpandPathsTest(unittest.TestCase):
 
     def test_path_with_spaces_and_unicode(self):
         a = self.touch("Ünïcode folder (1)/clip 01.webm")
-        self.assertEqual(expand_paths([str(Path(a).parent)]), [a])
+        self.assertEqual(expand_paths([str(Path(a).parent)]), [(a, "")])
 
 
 if __name__ == "__main__":

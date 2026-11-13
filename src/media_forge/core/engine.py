@@ -166,11 +166,17 @@ class Engine:
         with self._id_lock:
             return f"i{next(self._ids)}"
 
-    def add_files(self, paths: Iterable[str]) -> list[dict]:
+    def add_files(self, paths: Iterable[str], rel_dirs: Iterable[str] | None = None) -> list[dict]:
+        """Queue files. `rel_dirs` (one per path) names the sub-folder of a dropped folder the file came from; with
+        a chosen output folder the output goes to the same sub-folder below it."""
+        paths = list(paths)
+        subs = list(rel_dirs) if rel_dirs is not None else [""] * len(paths)
+        if len(subs) != len(paths):
+            raise ValueError("rel_dirs must name one sub-folder per path")
         added: list[dict] = []
         duplicates = 0
         seen: set[str] = set()
-        for raw in paths:
+        for raw, rel_dir in zip(paths, subs):
             if not raw:
                 continue
             path = os.path.abspath(str(raw))
@@ -185,7 +191,7 @@ class Engine:
             except OSError:
                 size = None
             item = Item(id=self._next_id(), path=path, name=os.path.basename(path), kind=kind, size=size,
-                        settings=self.settings.item_defaults(kind))
+                        settings=self.settings.item_defaults(kind), rel_dir=str(rel_dir or ""))
             added.append(self.queue.add(item))
             if self._probe_pool is not None:
                 self._probe_pool.submit(self._probe_item, item.id)
@@ -370,7 +376,7 @@ class Engine:
         tool = self._tool
         if tool is None:
             raise UserError(MSG_NO_FFMPEG)
-        out = catalog.output_path(item.path, item.kind, item.settings, self.settings.get())
+        out = catalog.output_path(item.path, item.kind, item.settings, self.settings.get(), rel_dir=item.rel_dir)
         workdir = self.paths.jobs_dir / "plan"
         caps = self._caps_for_rules()
         if item.kind == "video":
@@ -391,7 +397,7 @@ class Engine:
         info = item.info
         tool = self._wait_ffmpeg(ctx) if item.kind != "image" else self._tool
         try:
-            out = catalog.output_path(src, item.kind, settings, global_settings, reserve=True)
+            out = catalog.output_path(src, item.kind, settings, global_settings, reserve=True, rel_dir=item.rel_dir)
         except OSError as exc:
             raise UserError(MSG_WRITE_DENIED) from exc
         workdir = self.paths.job_cache(ctx.job_id)

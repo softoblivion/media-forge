@@ -135,36 +135,49 @@ def is_media_path(path: str | os.PathLike) -> bool:
     return Path(path).suffix.lower() in MEDIA_EXTENSIONS
 
 
-def expand_paths(paths: Iterable[str]) -> list[str]:
-    """Files as given; a folder becomes the media files directly inside it (one level, sorted by name, no
-    recursion). Duplicates are dropped, the order is kept; missing paths are passed on (the engine reports them)."""
-    out: list[str] = []
+def expand_paths(paths: Iterable[str]) -> list[tuple[str, str]]:
+    """`(path, sub-folder)` pairs. A file comes as given with sub-folder "". A folder becomes the media files in it
+    and in every folder below it, each with its folder relative to the given one ("" directly inside it): sorted by
+    name, a folder's own files before its sub-folders; links and junctions to folders are not followed. Duplicates
+    are dropped, the order is kept; missing paths are passed on (the engine reports them)."""
+    out: list[tuple[str, str]] = []
     seen: set[str] = set()
 
-    def add(path: str) -> None:
+    def add(path: str, rel_dir: str) -> None:
         key = os.path.normcase(os.path.abspath(path))
         if key not in seen:
             seen.add(key)
-            out.append(path)
+            out.append((path, rel_dir))
+
+    def walk(root: str) -> None:
+        stack = [(root, "")]
+        while stack:
+            folder, rel_dir = stack.pop()
+            try:
+                entries = sorted(os.scandir(folder), key=lambda e: e.name.lower())
+            except OSError:
+                log.info("cannot list the dropped folder %s", folder, exc_info=True)
+                continue
+            subfolders: list[tuple[str, str]] = []
+            for entry in entries:
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        if not entry.is_junction():
+                            subfolders.append((entry.path, os.path.join(rel_dir, entry.name)))
+                    elif entry.is_file() and is_media_path(entry.name):
+                        add(entry.path, rel_dir)
+                except OSError:
+                    continue
+            stack.extend(reversed(subfolders))
 
     for raw in paths:
         if not isinstance(raw, str) or not raw.strip():
             continue
         path = os.path.normpath(raw.strip())
         if os.path.isdir(path):
-            try:
-                entries = sorted(os.scandir(path), key=lambda e: e.name.lower())
-            except OSError:
-                log.info("cannot list the dropped folder %s", path, exc_info=True)
-                continue
-            for entry in entries:
-                try:
-                    if entry.is_file() and is_media_path(entry.name):
-                        add(entry.path)
-                except OSError:
-                    continue
+            walk(path)
         else:
-            add(path)
+            add(path, "")
     return out
 
 
@@ -442,7 +455,7 @@ class Bridge:
             self._toast("No media files in the dropped folder.")
             return []
         try:
-            items = list(self._engine.add_files(expanded) or [])
+            items = self._add_expanded(expanded)
         except Exception as exc:  # noqa: BLE001 - a drop has no promise to reject: tell the page with a toast
             if not isinstance(exc, (UserError, ValueError)):
                 log.exception("adding dropped files failed")
@@ -451,6 +464,10 @@ class Bridge:
         if items:
             self._emit("items_added", {"items": items})
         return items
+
+    def _add_expanded(self, expanded: list[tuple[str, str]]) -> list:
+        """Queue the pairs of `expand_paths`; the sub-folders are mirrored under a chosen output folder."""
+        return list(self._engine.add_files([p for p, _ in expanded], rel_dirs=[r for _, r in expanded]) or [])
 
     # -- state composition
     def _update_status(self) -> dict:
@@ -585,7 +602,7 @@ class Bridge:
         expanded = expand_paths(paths)
         if not expanded:
             return []
-        return list(self._engine.add_files(expanded) or [])
+        return self._add_expanded(expanded)
 
     @_api
     def pick_files(self):

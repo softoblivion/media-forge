@@ -211,8 +211,16 @@ class DelegationTest(BridgeTestBase):
         self.touch("clips/b.mov")
         self.touch("clips/a.flac")
         self.touch("clips/notes.txt")
+        self.touch("clips/2024/05/c.jpg")
         items = self.bridge.add_files([str(folder)])
-        self.assertEqual([i["name"] for i in items], ["a.flac", "b.mov"])
+        self.assertEqual([i["name"] for i in items], ["a.flac", "b.mov", "c.jpg"])
+        self.assertEqual(self.engine.rel_dirs, ["", "", os.path.join("2024", "05")])  # handed to the engine
+
+    def test_drop_of_a_folder_hands_its_subfolders_to_the_engine(self):
+        self.touch("card/DCIM/100/x.mp4")
+        self.touch("single.mp3")
+        self.bridge._add_dropped([str(self.tmp / "card"), str(self.tmp / "single.mp3")])
+        self.assertEqual(self.engine.rel_dirs, [os.path.join("DCIM", "100"), ""])
 
     def test_capabilities_and_settings(self):
         self.assertEqual(self.bridge.capabilities()["ffmpeg"], "ready")
@@ -409,7 +417,7 @@ class DropTest(BridgeTestBase):
         self.bridge._on_drop(self.drop_event(a, str(folder)))
         added = self.events("items_added")
         self.assertEqual(len(added), 1)
-        self.assertEqual([i["name"] for i in added[0][1]["items"]], ["a.mp4", "c.jpg"])
+        self.assertEqual([i["name"] for i in added[0][1]["items"]], ["a.mp4", "c.jpg", "deep.mp4"])
 
     def test_drop_of_non_media_file_goes_to_the_engine(self):
         doc = self.touch("doc.txt")
@@ -430,7 +438,7 @@ class DropTest(BridgeTestBase):
         self.assertEqual(self.engine.calls, [])
 
     def test_engine_failure_on_drop_becomes_toast(self):
-        def broken(_paths):
+        def broken(_paths, rel_dirs=None):
             raise ValueError("ffmpeg is not available.")
 
         self.engine.add_files = broken

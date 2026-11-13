@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from media_forge.core import catalog
 
@@ -152,6 +153,29 @@ class OutputPathTest(ScratchCase):
         self.assertEqual(result, folder / "pic (2).jpg")
         s_png = catalog.normalize("image", {"format": "png"})
         self.assertEqual(catalog.output_path(src, "image", s_png, gs), folder / "pic.png")
+
+    def test_subfolder_mirrored_in_folder_mode_only(self):
+        import os
+        import tempfile
+
+        src = self.out / "card" / "2024" / "05" / "pic.jpg"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_bytes(b"x")
+        target = Path(tempfile.mkdtemp(prefix="mirror_", dir=self.out))
+        rel = os.path.join("2024", "05")
+        gs = {"output_mode": "folder", "output_dir": str(target), "suffix": "_forge"}
+        s = catalog.normalize("image", {"format": "jpg"})
+        planned = catalog.output_path(src, "image", s, gs, rel_dir=rel)
+        self.assertEqual(planned, target / "2024" / "05" / "pic_forge.jpg")
+        self.assertFalse(planned.parent.exists())  # a preview creates nothing
+        reserved = catalog.output_path(src, "image", s, gs, reserve=True, rel_dir=rel)
+        self.assertEqual(reserved, planned)
+        self.assertTrue(reserved.is_file())
+        beside = {"output_mode": "beside", "suffix": "_forge"}
+        self.assertEqual(catalog.output_path(src, "image", s, beside, rel_dir=rel), src.parent / "pic_forge.jpg")
+        for bad in ("..", os.path.join("..", "up"), str(self.out), "C:/x", "C:x"):
+            with self.subTest(rel_dir=bad):  # a sub-folder that would leave the output folder is ignored
+                self.assertEqual(catalog.output_path(src, "image", s, gs, rel_dir=bad).parent, target)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@ Everything about using the app. Installation and the first steps are in the [REA
 4. **Show in folder** reveals the output in Explorer; **Clear done** removes finished files from the list.
 
 Outputs are written next to the sources as `<name>_forge.<ext>` unless **Output** in Settings names one folder.
+A dropped folder brings the media files of all its subfolders; with one output folder, the outputs keep the same
+subfolders below it (a card's `DCIM\100` becomes `<output folder>\DCIM\100`).
 
 ## Keyboard
 

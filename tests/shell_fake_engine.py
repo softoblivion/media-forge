@@ -140,8 +140,9 @@ class FakeEngine:
                     "items": [copy.deepcopy(self._items[i]) for i in self._order],
                     "capabilities": copy.deepcopy(self._caps), "options": self.options()}
 
-    def add_files(self, paths: list[str]) -> list[dict]:
+    def add_files(self, paths: list[str], rel_dirs: list[str] | None = None) -> list[dict]:
         self._record("add_files", list(paths))
+        self.rel_dirs = list(rel_dirs) if rel_dirs is not None else [""] * len(paths)
         added = []
         with self._lock:
             known = {os.path.normcase(i["path"]) for i in self._items.values()}

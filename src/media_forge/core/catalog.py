@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 import math
 import os
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Mapping
 
 KINDS = ("video", "image", "audio")
@@ -319,17 +319,34 @@ def is_audio_only(kind: str, settings: Mapping[str, Any]) -> bool:
     return kind == "audio" or (kind == "video" and settings.get("format") in AUDIO_ONLY_VIDEO_FORMATS)
 
 
+def _relative_subfolder(rel_dir: str) -> PurePath | None:
+    """`rel_dir` as a path that stays below the folder it is joined to, or None (empty, absolute, `..`)."""
+    if not rel_dir:
+        return None
+    sub = PurePath(str(rel_dir))
+    if sub.anchor or not sub.parts or any(part in ("..", ".") for part in sub.parts):
+        return None
+    return sub
+
+
 def output_path(source: str | os.PathLike, kind: str, settings: Mapping[str, Any],
-                global_settings: Mapping[str, Any], reserve: bool = False) -> Path:
+                global_settings: Mapping[str, Any], reserve: bool = False, rel_dir: str = "") -> Path:
     """`<dir>/<stem><suffix>.<ext>`, numbered ` (2)`, ` (3)` ... when taken; never the source itself.
 
-    With `reserve` an empty placeholder file is created exclusively, so two jobs (or two app windows) never pick
-    the same name; the job writes over it and deletes it when it fails or is cancelled.
+    In folder mode `<dir>` is the output folder plus `rel_dir`, the sub-folder of a dropped folder the source came
+    from (created with `reserve`); beside the source `rel_dir` does not apply. With `reserve` an empty placeholder
+    file is created exclusively, so two jobs (or two app windows) never pick the same name; the job writes over it
+    and deletes it when it fails or is cancelled.
     """
     src = Path(source)
     suffix = str(global_settings.get("suffix", "_forge"))
     if global_settings.get("output_mode") == "folder" and global_settings.get("output_dir"):
         folder = Path(str(global_settings["output_dir"]))
+        sub = _relative_subfolder(rel_dir)
+        if sub is not None:
+            folder = folder / sub
+            if reserve:
+                folder.mkdir(parents=True, exist_ok=True)
     else:
         folder = src.parent
     ext = output_extension(kind, settings)

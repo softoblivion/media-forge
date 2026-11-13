@@ -47,6 +47,7 @@ class Item:
     error: str | None = None
     added_at: float = field(default_factory=time.time)
     # internal
+    rel_dir: str = ""  # sub-folder of a dropped folder, mirrored under a chosen output folder
     info: Any = None
     started_at: float | None = None
     removed: bool = False

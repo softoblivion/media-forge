@@ -299,6 +299,29 @@ class EngineTest(ScratchCase):
         again = self.engine.item(item_id)["output"]["path"]
         self.assertGreater(os.stat(again).st_mtime, time.time() - 120)
 
+    def test_subfolders_of_a_dropped_folder_are_mirrored(self):
+        import os
+        import tempfile
+        from pathlib import Path
+
+        target = Path(tempfile.mkdtemp(prefix="mirror_", dir=self.out))
+        self.engine.set_settings({"output_dir": str(target)})
+        rels = ["", "2024", os.path.join("2024", "05")]
+        items = self.engine.add_files([str(media("photo.jpg")), str(media("tone.mp3")), str(media("clip.mp4"))],
+                                      rel_dirs=rels)
+        self.assertTrue(self.engine.wait_probed(60))
+        self.engine.set_item_settings(items[2]["id"], {"encoder": "cpu"})
+        self.engine.start_items(None)
+        self.assertTrue(self.engine.wait_idle(120))
+        outputs = []
+        for item in items:
+            final = self.engine.item(item["id"])
+            self.assertEqual(final["status"], "done", final["error"])
+            outputs.append(Path(final["output"]["path"]))
+        self.assertEqual([p.parent for p in outputs], [target / r if r else target for r in rels])
+        with self.assertRaises(ValueError):
+            self.engine.add_files(["a.mp4", "b.mp4"], rel_dirs=[""])
+
 
 class QueueTest(unittest.TestCase):
     """The queue alone with a fake runner: order, lanes, parallelism, cancel of queued items."""
