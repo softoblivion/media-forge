@@ -49,6 +49,15 @@ class FormatRows {
     this._tabStops();
   }
 
+  /** Disable the Audio only row (a source without sound); a stored audio-only value stays shown, and the Format
+   *  row keeps a tab stop so the choice can be moved there. */
+  setAudioDisabled(off, title = '') {
+    const r = this.rows[1];
+    if (r.disabled === !!off) return;
+    r.setDisabled(off, title);
+    this._tabStops();
+  }
+
   _tabStops() {
     for (const r of this.rows) {
       if (!r.disabled && !r.opts.some((b) => b.dataset.v === r.value)) r.opts[0].tabIndex = 0;
@@ -114,10 +123,12 @@ function el(tag, cls, html) {
 
 export class SettingsPanel {
   /**
-   * @param {{kind:'video'|'image'|'audio', settings:object, onPatch:(patch)=>Promise<object>}} o
+   * @param {{kind:'video'|'image'|'audio', settings:object, onPatch:(patch)=>Promise<object>, probe?:object}} o
+   *   `probe`: the item's probe (a file's panel); the defaults sheet has none.
    */
-  constructor({ kind, settings, onPatch }) {
+  constructor({ kind, settings, onPatch, probe = null }) {
     this.kind = kind;
+    this.probe = probe;
     this.onPatch = onPatch;
     this.s = { ...settings };
     this.confirmed = { ...settings };
@@ -336,6 +347,12 @@ export class SettingsPanel {
     this.sync(settings);
   }
 
+  /** A new probe of the same file (it changed on disk). */
+  setProbe(probe) {
+    this.probe = probe || null;
+    this._visibility();
+  }
+
   _apply() {
     const s = this.s;
     this._codecs();
@@ -373,6 +390,8 @@ export class SettingsPanel {
       const fmt = o.video.formats.find((f) => f.id === s.format) || { codecs: [], audio: true };
       const audioOnly = AUDIO_ONLY.has(s.format);
       const hasCodecs = fmt.codecs.length > 0;
+      const silent = !!this.probe && this.probe.has_audio === false;
+      this.c.format.setAudioDisabled(silent, silent ? 'This file has no audio track' : '');
       this._show('codec', hasCodecs);
       this._show('encoder', hasCodecs && s.codec !== 'copy');
       if (this.c.encoder) {

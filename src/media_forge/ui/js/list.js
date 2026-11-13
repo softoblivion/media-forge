@@ -198,6 +198,7 @@ function render(c, it, prev) {
   // Panel: settings shown as returned; locked unless the file is ready or failed.
   if (c.panel) {
     if (!prev || JSON.stringify(prev.settings) !== JSON.stringify(it.settings)) c.panel.external(it.settings);
+    if (prev && JSON.stringify(prev.probe) !== JSON.stringify(it.probe)) c.panel.setProbe(it.probe);
     lockPanel(c);
     updateDrawerActions(c);
   }
@@ -272,6 +273,7 @@ function expand(id) {
   c.panel = new SettingsPanel({
     kind: it.kind,
     settings: it.settings,
+    probe: it.probe,
     onPatch: async (patch) => {
       const item = await call('set_item_settings', id, patch);
       if (item && cards.has(id)) {
