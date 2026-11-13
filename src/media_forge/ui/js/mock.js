@@ -1130,8 +1130,8 @@ function buildOptions(caps) {
         { id: 'webm', label: 'WebM', codecs: ['vp9', 'av1'], audio: true },
         { id: 'mov', label: 'MOV', codecs: ['h264', 'h265', 'prores'], audio: true },
         { id: 'gif', label: 'GIF', codecs: [], audio: false },
-        { id: 'webp', label: 'WebP · animated', codecs: [], audio: false },
-        { id: 'apng', label: 'PNG · animated', codecs: [], audio: false },
+        { id: 'webp', label: 'WebP', title: 'Animated WebP', codecs: [], audio: false },
+        { id: 'apng', label: 'APNG', title: 'Animated PNG', codecs: [], audio: false },
         { id: 'mp3', label: 'MP3 · audio only', codecs: [], audio: true },
         { id: 'm4a', label: 'M4A · audio only', codecs: [], audio: true },
         { id: 'opus', label: 'Opus · audio only', codecs: [], audio: true },
@@ -1169,8 +1169,8 @@ function buildOptions(caps) {
     },
     audio: {
       formats: [
-        { id: 'mp3', label: 'MP3', lossy: true }, { id: 'm4a', label: 'M4A · AAC', lossy: true },
-        { id: 'opus', label: 'Opus', lossy: true }, { id: 'ogg', label: 'OGG · Vorbis', lossy: true },
+        { id: 'mp3', label: 'MP3', lossy: true }, { id: 'm4a', label: 'M4A', title: 'AAC in M4A', lossy: true },
+        { id: 'opus', label: 'Opus', lossy: true }, { id: 'ogg', label: 'OGG', title: 'Vorbis in OGG', lossy: true },
         { id: 'flac', label: 'FLAC', lossy: false }, { id: 'wav', label: 'WAV', lossy: false },
       ],
       bitrates: [64, 96, 128, 160, 192, 256, 320],

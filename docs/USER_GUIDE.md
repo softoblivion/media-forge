@@ -64,8 +64,9 @@ The gear in the title bar opens the settings sheet.
 | Audio | MP3, M4A (AAC), Opus, OGG (Vorbis), FLAC, WAV | 64 to 320 kbps (Opus up to 256; FLAC and WAV are lossless, and WAV keeps the source's 16-bit, 24-bit, 32-bit or floating-point samples); sample rate keep / 44.1 / 48 kHz; mono / stereo; loudness normalisation to -16 LUFS |
 
 An animated GIF, WebP or PNG is listed as a video, so it keeps every frame: it can become an MP4 or any other
-video, or stay animated as GIF, animated WebP or animated PNG (animated PNG is lossless). Animated outputs carry
-no audio and cannot be held to a size limit.
+video, or stay animated as GIF, animated WebP or animated PNG (animated PNG is lossless). In the Format row these
+two read WebP and APNG, and their tooltips say Animated WebP and Animated PNG; likewise the audio formats M4A and
+OGG carry AAC and Vorbis. Animated outputs carry no audio and cannot be held to a size limit.
 
 Upscale methods for 2x / 4x: **Lanczos** (resampling with a light sharpen), **FSRCNN** (small deterministic
 super-resolution network, bundled) and, for photos, **EDSR** (larger network, downloaded once, 38 MB per scale,

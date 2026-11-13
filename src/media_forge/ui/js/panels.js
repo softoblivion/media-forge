@@ -18,9 +18,9 @@ const UPSCALE = new Set(['2x', '4x']);
 const LOSSLESS_AUDIO = new Set(['flac', 'wav']);
 const ANIMATED = new Set(['gif', 'webp', 'apng']);
 
-const opt = (list) => list.map((x) => ({ value: String(x.id), label: x.label }));
+const opt = (list) => list.map((x) => ({ value: String(x.id), label: x.label, title: x.title }));
 
-/** Short label of a format for summaries ("MP3 · audio only" -> "MP3", "M4A · AAC" -> "M4A"). */
+/** Short label of a format for summaries ("MP3 · audio only" -> "MP3"). */
 export function shortFormat(kind, id) {
   const f = formatsOf(kind).find((x) => x.id === id);
   return f ? f.label.split(' · ')[0] : String(id || '').toUpperCase();

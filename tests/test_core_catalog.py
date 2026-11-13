@@ -118,6 +118,20 @@ class NormalizeTest(unittest.TestCase):
         opts["video"]["formats"].clear()  # a copy, not the module table
         self.assertTrue(catalog.options(CAPS_GPU)["video"]["formats"])
 
+    def test_short_labels_carry_their_meaning_as_titles(self):
+        opts = catalog.options(CAPS_GPU)
+        video = {f["id"]: f for f in opts["video"]["formats"]}
+        audio = {f["id"]: f for f in opts["audio"]["formats"]}
+        self.assertEqual((video["webp"]["label"], video["webp"]["title"]), ("WebP", "Animated WebP"))
+        self.assertEqual((video["apng"]["label"], video["apng"]["title"]), ("APNG", "Animated PNG"))
+        self.assertEqual((audio["m4a"]["label"], audio["m4a"]["title"]), ("M4A", "AAC in M4A"))
+        self.assertEqual((audio["ogg"]["label"], audio["ogg"]["title"]), ("OGG", "Vorbis in OGG"))
+        for kind in ("video", "image", "audio"):
+            for f in opts[kind]["formats"]:
+                with self.subTest(kind=kind, id=f["id"]):
+                    self.assertTrue(isinstance(f.get("title", ""), str))
+                    self.assertNotEqual(f.get("title"), "")
+
     def test_kind_for_extension(self):
         self.assertEqual(catalog.kind_for_extension(r"C:\a\b.MP4"), "video")
         self.assertEqual(catalog.kind_for_extension("x.heic"), "image")

@@ -51,8 +51,8 @@ VIDEO_FORMATS = [
     {"id": "webm", "label": "WebM", "codecs": ["vp9", "av1"], "audio": True},
     {"id": "mov", "label": "MOV", "codecs": ["h264", "h265", "prores"], "audio": True},
     {"id": "gif", "label": "GIF", "codecs": [], "audio": False},
-    {"id": "webp", "label": "WebP · animated", "codecs": [], "audio": False},
-    {"id": "apng", "label": "PNG · animated", "codecs": [], "audio": False},
+    {"id": "webp", "label": "WebP", "title": "Animated WebP", "codecs": [], "audio": False},
+    {"id": "apng", "label": "APNG", "title": "Animated PNG", "codecs": [], "audio": False},
     {"id": "mp3", "label": "MP3 · audio only", "codecs": [], "audio": True},
     {"id": "m4a", "label": "M4A · audio only", "codecs": [], "audio": True},
     {"id": "opus", "label": "Opus · audio only", "codecs": [], "audio": True},
@@ -89,8 +89,8 @@ IMAGE_SCALES = [
 ]
 
 AUDIO_FORMATS = [
-    {"id": "mp3", "label": "MP3", "lossy": True}, {"id": "m4a", "label": "M4A · AAC", "lossy": True},
-    {"id": "opus", "label": "Opus", "lossy": True}, {"id": "ogg", "label": "OGG · Vorbis", "lossy": True},
+    {"id": "mp3", "label": "MP3", "lossy": True}, {"id": "m4a", "label": "M4A", "title": "AAC in M4A", "lossy": True},
+    {"id": "opus", "label": "Opus", "lossy": True}, {"id": "ogg", "label": "OGG", "title": "Vorbis in OGG", "lossy": True},
     {"id": "flac", "label": "FLAC", "lossy": False}, {"id": "wav", "label": "WAV", "lossy": False},
 ]
 AUDIO_BITRATES = [64, 96, 128, 160, 192, 256, 320]
