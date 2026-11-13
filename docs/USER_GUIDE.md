@@ -9,7 +9,9 @@ Everything about using the app. Installation and the first steps are in the [REA
 2. Click a file to open its settings: format and codec, encoder, scale and upscale method, quality or size limit,
    frame rate, audio, metadata. The line under the file name shows what will be written.
 3. Press **Start** (`Ctrl+Enter`). Each card shows the stage, progress, speed and ETA; a running job can be
-   cancelled, a finished or failed one run again.
+   cancelled, a finished or failed one run again. A cancelled or failed job deletes its unfinished output; when
+   another program (a virus scanner, a thumbnail viewer) still holds that file after about 3 seconds, the file
+   stays and the log names it.
 4. **Show in folder** reveals the output in Explorer; **Clear done** removes finished files from the list.
 
 Outputs are written next to the sources as `<name>_forge.<ext>` unless **Output** in Settings names one folder.
@@ -20,7 +22,10 @@ at 1000 media files (or 100,000 entries read) and says so; a file given directly
 
 Files and folders also reach the list from Explorer: **Open with** > Media Forge, **Send to** (a shortcut to
 `MediaForge.exe` in the `shell:sendto` folder), or a file dropped on `MediaForge.exe` itself. While Media Forge is
-open, such a start adds its files to the open window instead of opening a second one.
+open, such a start adds its files to the open window instead of opening a second one. When that window is just
+closing, the start waits for it for up to 10 seconds and then opens its own window with the files. A message says
+when the files could not be added: the open window did not answer in that time, or it runs as another user, or
+without administrator rights while the start has them.
 
 ## The window
 
@@ -66,7 +71,8 @@ The gear in the title bar opens the settings sheet.
 | Audio | MP3, M4A (AAC), Opus, OGG (Vorbis), FLAC, WAV | 64 to 320 kbps (Opus up to 256; FLAC and WAV are lossless, and WAV keeps the source's 16-bit, 24-bit, 32-bit or floating-point samples); sample rate keep / 44.1 / 48 kHz; mono / stereo; loudness normalisation to -16 LUFS |
 
 A video's formats show as two rows with one choice between them: **Format** holds the videos and the animated
-images, **Audio only** the outputs that keep just the sound.
+images, **Audio only** the outputs that keep just the sound. For a video without an audio track the Audio only row
+is dimmed, and its tooltip says that the file has no audio track.
 
 An animated GIF, WebP or PNG is listed as a video, so it keeps every frame: it can become an MP4 or any other
 video, or stay animated as GIF, animated WebP or animated PNG (animated PNG is lossless). In the Format row these
