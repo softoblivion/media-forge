@@ -432,6 +432,25 @@ class DropTest(BridgeTestBase):
         self.assertEqual(self.events("items_added"), [])
         self.assertEqual(self.events("toast")[-1][1]["message"], "No media files in the dropped folder.")
 
+    def test_given_files_before_ready_wait_for_the_page(self):
+        # The command line and a second start add files while the window is still loading: the items are queued at
+        # once, and their event is delivered only after the page called ready(), with nothing lost.
+        given = self.touch("given.mp4")
+        self.assertFalse(self.pump.ready)
+        items = self.bridge._add_dropped([given], "No media files in the given folder.")
+        self.assertEqual([i["name"] for i in items], ["given.mp4"])
+        self.assertEqual(self.pump.flush(), 0)
+        self.assertEqual(len(self.events("items_added")), 1)
+        state = self.bridge.ready()
+        self.assertEqual([i["name"] for i in state["items"]], ["given.mp4"])
+        self.assertGreater(self.pump.flush(), 0)
+        self.assertIn("given.mp4", "".join(self.window.scripts))
+
+    def test_given_folder_without_media_names_the_source(self):
+        (self.tmp / "empty").mkdir()
+        self.bridge._add_dropped([str(self.tmp / "empty")], "No media files in the given folder.")
+        self.assertEqual(self.events("toast")[-1][1]["message"], "No media files in the given folder.")
+
     def test_drop_without_paths_is_ignored(self):
         self.bridge._on_drop({"dataTransfer": {"files": [{"name": "x.mp4"}]}})
         self.bridge._on_drop(None)

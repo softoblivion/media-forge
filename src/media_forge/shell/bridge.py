@@ -449,10 +449,12 @@ class Bridge:
             return
         self._add_dropped(paths)
 
-    def _add_dropped(self, paths: list[str]) -> list:
+    def _add_dropped(self, paths: list[str], empty_message: str = "No media files in the dropped folder.") -> list:
+        """Add paths that come from the shell (a drop, the command line, a second start) and announce the items with
+        `items_added`; `empty_message` is the toast when the paths hold no media file."""
         expanded = expand_paths(paths)
         if not expanded:
-            self._toast("No media files in the dropped folder.")
+            self._toast(empty_message)
             return []
         try:
             items = self._add_expanded(expanded)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import socket
 import sys
 import unittest
@@ -30,6 +31,13 @@ class MainHelpersTest(unittest.TestCase):
         self.assertTrue(args.debug and args.fake)
         self.assertEqual(args.ui_dir, "C:\\ui")
         self.assertFalse(main.parse_args([]).debug)
+        self.assertEqual(main.parse_args([]).files, [])
+
+    def test_parse_args_takes_files_as_absolute_paths(self):
+        # Open with / Send To / a file dropped on the exe: the shell passes the paths as plain arguments.
+        args = main.parse_args(["clip one.mp4", "--debug", "C:\\media\\photo.jpg"])
+        self.assertTrue(args.debug)
+        self.assertEqual(args.files, [os.path.abspath("clip one.mp4"), "C:\\media\\photo.jpg"])
 
     def test_ui_dir(self):
         self.assertEqual(main.resolve_ui_dir(), Path(main.__file__).resolve().parents[1] / "ui")
@@ -63,6 +71,31 @@ class MainHelpersTest(unittest.TestCase):
                 mock.patch("media_forge.shell.winutil.bring_window_to_front") as front:
             self.assertEqual(main.main([]), 0)
         front.assert_called_once_with("Media Forge")
+
+    def test_second_instance_hands_its_files_to_the_first(self):
+        with mock.patch("media_forge.shell.winutil.acquire_single_instance", return_value=None), \
+                mock.patch("media_forge.shell.winutil.bring_window_to_front") as front, \
+                mock.patch("media_forge.shell.winutil.message_box") as box, \
+                mock.patch("media_forge.shell.instance.send_files", return_value=True) as send:
+            self.assertEqual(main.main(["C:\\media\\a.mp4"]), 0)
+        send.assert_called_once_with(["C:\\media\\a.mp4"])
+        front.assert_called_once_with("Media Forge")
+        box.assert_not_called()
+
+    def test_second_instance_without_files_sends_nothing(self):
+        with mock.patch("media_forge.shell.winutil.acquire_single_instance", return_value=None), \
+                mock.patch("media_forge.shell.winutil.bring_window_to_front"), \
+                mock.patch("media_forge.shell.instance.send_files") as send:
+            self.assertEqual(main.main(["--debug"]), 0)
+        send.assert_not_called()
+
+    def test_second_instance_says_so_when_the_first_does_not_answer(self):
+        with mock.patch("media_forge.shell.winutil.acquire_single_instance", return_value=None), \
+                mock.patch("media_forge.shell.winutil.bring_window_to_front"), \
+                mock.patch("media_forge.shell.winutil.message_box") as box, \
+                mock.patch("media_forge.shell.instance.send_files", return_value=False):
+            self.assertEqual(main.main(["C:\\media\\a.mp4"]), 0)
+        box.assert_called_once_with("Media Forge", main.MSG_NOT_HANDED_OVER, error=True)
 
     def test_fake_module_loads(self):
         module = main.load_fake_module()

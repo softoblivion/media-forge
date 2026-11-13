@@ -16,6 +16,10 @@ Outputs are written next to the sources as `<name>_forge.<ext>` unless **Output*
 A dropped folder brings the media files of all its subfolders; with one output folder, the outputs keep the same
 subfolders below it (a card's `DCIM\100` becomes `<output folder>\DCIM\100`).
 
+Files and folders also reach the list from Explorer: **Open with** > Media Forge, **Send to** (a shortcut to
+`MediaForge.exe` in the `shell:sendto` folder), or a file dropped on `MediaForge.exe` itself. While Media Forge is
+open, such a start adds its files to the open window instead of opening a second one.
+
 ## Keyboard
 
 | Shortcut | Action |

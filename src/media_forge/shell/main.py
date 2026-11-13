@@ -1,6 +1,8 @@
 """Application entry point: single instance, logging, engine, bridge and the fixed-size frameless 3:4 window.
 
-    python -m media_forge.shell.main [--debug] [--fake] [--ui-dir PATH]
+    python -m media_forge.shell.main [--debug] [--fake] [--ui-dir PATH] [FILE_OR_FOLDER ...]
+
+Given files are added to the list; while another instance runs they are handed to its window (shell/instance.py).
 
 The frozen exe starts here through build/entry.py. `--fake` runs the stand-in engine of tests/shell_fake_engine.py
 (source tree only) so the window can be opened without the core.
@@ -31,17 +33,24 @@ START_SIZE = SIZE_LADDER[0]
 HTTP_PORT_FIRST = 42101  # fixed port range keeps the page origin (and its localStorage) stable between launches
 HTTP_PORT_TRIES = 40
 LOG_NAME = "app.log"
+MSG_NOT_HANDED_OVER = "The files could not be added: the open Media Forge window did not answer."
+MSG_NO_MEDIA_GIVEN = "No media files in the given folder."
 
 log = logging.getLogger("media_forge.shell.main")
 _keep_alive: list[Any] = []  # ctypes callbacks and hooks that must outlive the window
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    """Options and the files to add (Open with, Send To, a file dropped on the exe); `files` are made absolute,
+    since a second start hands them to a window that runs in another working folder."""
     parser = argparse.ArgumentParser(prog="MediaForge", description="Media Forge")
     parser.add_argument("--debug", action="store_true", help="enable WebView2 dev tools and verbose logging")
     parser.add_argument("--fake", action="store_true", help="use the stand-in engine (source tree only)")
     parser.add_argument("--ui-dir", help="serve the UI from this folder instead of the bundled one")
-    return parser.parse_args(argv)
+    parser.add_argument("files", nargs="*", help="media files or folders to add to the list")
+    args = parser.parse_intermixed_args(argv)
+    args.files = [os.path.abspath(f) for f in args.files if f.strip()]
+    return args
 
 
 def project_root() -> Path:
@@ -168,13 +177,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         return int(run_apply(raw[1:]) or 0)
     args = parse_args(raw)
 
-    from . import winutil
+    from . import instance, winutil
     from .bridge import Bridge, EventPump
 
     mutex = winutil.acquire_single_instance(MUTEX_NAME)
     if mutex is None:
+        handed_over = not args.files or instance.send_files(args.files)
         winutil.bring_window_to_front(WINDOW_TITLE)
+        if not handed_over:
+            winutil.message_box(WINDOW_TITLE, MSG_NOT_HANDED_OVER, error=True)
         return 0
+    receiver = instance.FileReceiver()  # opened at once: a second start may come while this one is still loading
+    receiver.start()
 
     try:
         paths = resolve_paths(args.fake)
@@ -204,6 +218,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         engine.start()  # loads the settings, starts the workers and the tool discovery; events wait in the pump
     except Exception:  # noqa: BLE001
         log.exception("engine start failed")
+    # Files of the command line and of later starts: queued now, shown when the page is ready (the pump keeps the
+    # events until then).
+    def add_given(files: list[str]) -> None:
+        bridge._add_dropped(files, MSG_NO_MEDIA_GIVEN)
+
+    if args.files:
+        log.info("adding %d path(s) from the command line", len(args.files))
+        add_given(args.files)
+    receiver.set_handler(add_given)
     try:
         updater = build_updater(paths, __version__, bridge._on_update_status, bridge._on_update_toast)
         bridge._attach_updater(updater, build_scheduler(updater))
@@ -242,6 +265,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         winutil.message_box(WINDOW_TITLE, "The window could not be started. Check that the Microsoft Edge WebView2 "
                             "Runtime is installed. Details are in the log.", error=True)
     finally:
+        receiver.stop()
         bridge._shutdown()
         log.info("Media Forge stopped")
         logging.shutdown()
