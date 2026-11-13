@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
@@ -192,6 +193,21 @@ class HarmlessHelpersTest(unittest.TestCase):
         self.assertFalse(hook.begin_drag("move"))
         self.assertFalse(hook.is_minimized())
         self.assertEqual(hook.place((10, 20, 630, 840)), (10, 20, 630, 840))
+
+    def test_a_failure_after_the_original_procedure_ran_does_not_run_it_again(self):
+        import ctypes
+
+        hook = winutil.WindowHook(0, MIN)
+        calls = []
+        hook._call = lambda *args: calls.append(args[1]) or 7
+        info = winutil._MINMAXINFO()
+        with mock.patch.object(hook, "min_client", side_effect=RuntimeError("no monitor")):
+            self.assertEqual(hook._wnd_proc(0, winutil.WM_GETMINMAXINFO, 0, ctypes.addressof(info)), 7)
+        self.assertEqual(calls, [winutil.WM_GETMINMAXINFO])
+        calls.clear()
+        with mock.patch.object(hook, "_on_pos_changing", side_effect=RuntimeError("bad rect")):
+            self.assertEqual(hook._wnd_proc(0, winutil.WM_WINDOWPOSCHANGING, 0, 0), 7)  # failed before the call
+        self.assertEqual(calls, [winutil.WM_WINDOWPOSCHANGING])
 
     def test_style_bits(self):
         style = winutil.WindowHook._fixed_style(0x16CF0000)  # WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN

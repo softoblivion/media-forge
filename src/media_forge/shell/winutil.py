@@ -503,6 +503,9 @@ def set_zoom_factor(window: Any, factor: float) -> bool:
 # - WM_DPICHANGED (per-monitor DPI awareness): the client size is multiplied by the ratio of the DPIs at the
 #   position Windows suggests, so the logical size stays and WebView2 renders at the new density.
 
+_NOT_CALLED = object()
+
+
 class WindowHook:
     """Window-procedure subclass of the resizable frameless window; keep the instance alive as long as the window
     exists. Runs on the UI thread. `minimum` is the minimum page size in logical px; `zoom` the Scale factor."""
@@ -658,6 +661,7 @@ class WindowHook:
                                  (outer.bottom - outer.top) + height - after[3], flags | SWP_NOMOVE)
 
     def _wnd_proc(self, hwnd, msg, wparam, lparam):
+        result = _NOT_CALLED  # the original procedure's result once a branch has called it
         try:
             if msg == WM_NCCALCSIZE and wparam:
                 params = ctypes.cast(lparam, ctypes.POINTER(_NCCALCSIZE_PARAMS)).contents
@@ -721,4 +725,6 @@ class WindowHook:
                 return result
         except Exception:  # noqa: BLE001 - never let a callback exception escape into the message loop
             log.debug("window procedure hook failed for message 0x%04x", msg, exc_info=True)
+            if result is not _NOT_CALLED:
+                return result  # the message was handled once already; a second call would apply it twice
         return self._call(hwnd, msg, wparam, lparam)
