@@ -10,7 +10,7 @@
 import { Segmented, Switch, Slider } from '../vendor/liquid_ui/js/controls.js';
 import { store, watch, gpuFor, formatsOf } from './store.js';
 import { icon } from './icons.js';
-import { escapeHtml } from './format.js';
+import { escapeHtml, audioNote } from './format.js';
 import { toast } from '../vendor/liquid_ui/js/toast.js';
 
 const AUDIO_ONLY = new Set(['mp3', 'm4a', 'opus', 'flac', 'wav']);
@@ -357,6 +357,7 @@ export class SettingsPanel {
       this._show('fps', !audioOnly);
       this._hint('fps', s.format === 'gif' ? 'GIF is capped at 15 fps' : '');
       this._show('audio', !audioOnly && fmt.audio);
+      this._hint('audio', audioNote(s.format, s.audio));
       const brOn = audioOnly ? !LOSSLESS_AUDIO.has(s.format) : fmt.audio && s.audio === 'aac';
       this._show('audio_bitrate_k', brOn);
       this._show('sharpen', !audioOnly && up);

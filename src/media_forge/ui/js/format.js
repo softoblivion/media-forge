@@ -33,6 +33,15 @@ export function sampleRate(hz) {
   return `${Number.isInteger(k) ? k : num(k, 1)} kHz`;
 }
 
+/** What a video container writes for the Audio choice, when it differs from the label: WebM holds only Opus or
+ *  Vorbis, so the engine copies those and writes everything else, the AAC choice included, as Opus. */
+export function audioNote(format, audio) {
+  if (format !== 'webm') return '';
+  if (audio === 'aac') return 'Written as Opus: WebM cannot hold AAC';
+  if (audio === 'keep') return 'Opus and Vorbis are copied; other audio is written as Opus';
+  return '';
+}
+
 /** Kind labels used in the UI (the bridge's kind `image` reads as "Photo"). */
 export const KIND_LABEL = { video: 'Video', image: 'Photo', audio: 'Audio' };
 /** "Apply to all video" / "Apply to all photos" / "Apply to all audio". */
