@@ -65,7 +65,9 @@ allows.
 The limit is a hard cap on the output file, set per file in MB:
 
 - **Video:** the bitrate is computed from the duration and the audio share, encoded in two passes (or NVENC VBR
-  with a cap), and the job retries once with a lower target when the result still exceeds the cap.
+  with a cap), and the job retries once with a lower target when the result still exceeds the cap. When the audio
+  would leave the picture too little room (a large lossless track kept as it is), the audio is re-encoded at a
+  lower bitrate instead.
 - **Photo:** the quality is searched down to the limit; when the lowest acceptable quality is still too large, the
   image is downscaled step by step.
 - **Audio:** the bitrate comes from the duration, rounded down to the nearest value the format offers.

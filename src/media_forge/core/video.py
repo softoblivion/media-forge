@@ -37,6 +37,7 @@ AUDIO_COPY_OK: dict[str, set[str] | None] = {
 BUDGET_MARGIN = 0.96
 MIN_VIDEO_KBPS = 80
 LOW_KBPS_FIT = 150
+AUDIO_FIT_KBPS = (192, 160, 128, 96, 64, 48, 32)  # audio rates tried, highest first, when a size cap needs room
 GIF_MAX_FPS = 15
 GIF_PALETTE = "split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5"
 SEI_FILTER = {"libx264": "filter_units=remove_types=6", "libx265": "filter_units=remove_types=39"}
@@ -93,9 +94,29 @@ def _audio_args(settings: Mapping[str, Any], info: ProbeInfo, fmt: str) -> tuple
     if settings["audio"] == "keep" and (allowed is None or (info.acodec or "") in allowed):
         source_bps = info.audio_bitrate or ((info.bitrate or 0) * 0.1)
         return ["-c:a", "copy"], source_bps / 1000.0, True
+    return _encode_audio_args(fmt, br), float(br), True
+
+
+def _encode_audio_args(fmt: str, kbps: int) -> list[str]:
     if fmt == "webm":
-        return ["-c:a", "libopus", "-b:a", f"{br}k"], float(br), True
-    return ["-c:a", "aac", "-b:a", f"{br}k"], float(br), True
+        return ["-c:a", "libopus", "-b:a", f"{kbps}k"]
+    return ["-c:a", "aac", "-b:a", f"{kbps}k"]
+
+
+def _fitted_audio_kbps(total_kbps: float, audio_kbps: float, forced: bool) -> int | None:
+    """A lower audio bitrate under a size cap: the highest step that leaves the video `LOW_KBPS_FIT`, else the
+    lowest step; None when no step is below the current rate (`forced`: any step, the rate being unreliable)."""
+    steps = [b for b in AUDIO_FIT_KBPS if forced or b < audio_kbps]
+    if not steps:
+        return None
+    for step in steps:
+        if total_kbps - step >= LOW_KBPS_FIT:
+            return step
+    return steps[-1]
+
+
+def _copies_audio(plan: Plan) -> bool:
+    return any(a == "-c:a" and b == "copy" for args in plan.commands() for a, b in zip(args, args[1:]))
 
 
 def _codec_args(codec: str, encoder: str, quality: int, kbps: int | None, gop: int, strip: bool,
@@ -162,8 +183,10 @@ def _rate_args(codec: str, quality: int, kbps: int | None, pass_no: int | None) 
 
 def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Mapping[str, Any] | None,
                ffmpeg: str, out: Path, workdir: Path, *, force_cpu: bool = False,
-               video_kbps: int | None = None) -> Plan:
-    """Decide every ffmpeg argument of a video job. Raises UserError for impossible requests."""
+               video_kbps: int | None = None, audio_fit: bool = False) -> Plan:
+    """Decide every ffmpeg argument of a video job. Raises UserError for impossible requests.
+
+    `audio_fit` (the size-cap retry after a copied audio track) re-encodes the audio at a lower rate."""
     fmt = settings["format"]
     if fmt in catalog.AUDIO_ONLY_VIDEO_FORMATS:
         from .audio import plan_audio
@@ -204,6 +227,13 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
     kbps: int | None = None
     if plan.size_limit_bytes is not None:
         budget = float(limit) * 1024 * 1024 * 8 * BUDGET_MARGIN
+        total_kbps = budget / float(duration) / 1000.0
+        if with_audio and (audio_fit or total_kbps - audio_kbps < LOW_KBPS_FIT):
+            # the audio (often a copied lossless track) leaves the video too little room: encode it lower
+            fitted = _fitted_audio_kbps(total_kbps, audio_kbps, forced=audio_fit and not info.audio_bitrate)
+            if fitted is not None:
+                audio_args, audio_kbps = _encode_audio_args(fmt, fitted), float(fitted)
+                plan.notes.append(f"audio re-encoded at {fitted} kbps to leave room for the video")
         audio_bits = audio_kbps * 1000.0 * float(duration)
         kbps = max(MIN_VIDEO_KBPS, int(math.floor((budget - audio_bits) / float(duration) / 1000.0)))
         if video_kbps is not None:
@@ -395,7 +425,7 @@ def run_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Map
             new_kbps = max(1, int((plan.video_kbps or MIN_VIDEO_KBPS) * plan.size_limit_bytes / size * 0.95))
             log.info("output %d B exceeds the cap %d B; retrying at %d kbps", size, plan.size_limit_bytes, new_kbps)
             plan = plan_video(src, info, settings, caps, ffmpeg, out, workdir, force_cpu=force_cpu,
-                              video_kbps=new_kbps)
+                              video_kbps=new_kbps, audio_fit=_copies_audio(plan))
             _execute(plan, model, ctx, "retrying")
             if out.stat().st_size > plan.size_limit_bytes:
                 raise UserError(MSG_LIMIT_NOT_MET)

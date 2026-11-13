@@ -77,6 +77,10 @@ def _make(name: str, path: Path) -> None:
         _ff("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30", "-f", "lavfi", "-i",
             "sine=frequency=440:duration=6", "-t", "6", "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-flags:a", "+bitexact", "-b:a", "128k", "-shortest", str(path))
+    elif name == "clip_pcm.mkv":  # 640x360, 6 s, a 1536 kbps PCM track: the audio alone is about 1.1 MB
+        _ff("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30", "-f", "lavfi", "-i",
+            "sine=frequency=440:duration=6", "-t", "6", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p",
+            "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", "-shortest", str(path))
     elif name == "small.mp4":  # 160x90, 1 s, for model upscales
         _ff("-f", "lavfi", "-i", "testsrc2=size=160x90:rate=10", "-t", "1", "-c:v", "libx264", "-pix_fmt",
             "yuv420p", str(path))

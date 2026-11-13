@@ -247,6 +247,22 @@ class VideoTest(ScratchCase):
                                          size_limit_mb=0.5, encoder="cpu")
                 self.assertLessEqual(out.stat().st_size, 0.5 * 1024 * 1024)
 
+    def test_size_limit_with_a_large_copied_audio_track(self):
+        """Copied audio that leaves the video too little room is re-encoded lower instead of missing the cap."""
+        limit = 1.0
+        info = probe.probe(media("clip_pcm.mkv"), FFPROBE)
+        self.assertGreater((info.audio_bitrate or 0) * info.duration / 8, limit * 1024 * 1024 * 0.9)
+        out, plan, _ = self.run_job("clip_pcm.mkv", "pcm_capped.mkv", format="mkv", codec="h264", encoder="cpu",
+                                    size_limit_mb=limit)
+        self.assertLessEqual(out.stat().st_size, limit * 1024 * 1024)
+        audio = astreams(ffprobe(out))[0]
+        self.assertEqual(audio["codec_name"], "aac")
+        self.assertTrue(any("audio re-encoded" in note for note in plan.notes), plan.notes)
+        # the same cap with room to spare keeps the copied track
+        out, plan, _ = self.run_job("clip_pcm.mkv", "pcm_roomy.mkv", format="mkv", codec="h264", encoder="cpu",
+                                    size_limit_mb=4.0)
+        self.assertEqual(astreams(ffprobe(out))[0]["codec_name"], "pcm_s16le")
+
     def test_size_limit_nvenc(self):
         if not nvenc()["h264"]:
             self.skipTest("NVENC h264 is not available on this machine")
