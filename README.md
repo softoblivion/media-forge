@@ -41,7 +41,7 @@
 - **Free and open source.** GPL-3.0, no trial, no watermark, no paid tier. The source is here; build it yourself
   if you prefer.
 - **Portable.** One `MediaForge.exe` with a data folder next to it, no installer. Move the folder, move the app.
-  The second launch brings the running window to the front.
+  A second start brings the running window to the front and adds its files to the list.
 
 ## Quick start
 
@@ -65,11 +65,11 @@ up-to-date Windows 10). No installer, no admin rights.
 | **Compress video** | H.264, H.265 / HEVC, AV1 (CPU, or NVIDIA NVENC when present), VP9 and ProRes. A quality slider (100 = visually lossless) or a size limit in MB. Fit to 1080p / 720p / 480p, frame rate 24 / 30 / 60, audio kept, re-encoded to AAC or dropped. |
 | **Compress photos and audio** | JPEG, WebP, AVIF, HEIC by quality or by size limit; MP3, AAC, Opus, OGG at a chosen bitrate or a size limit, with optional EBU R128 loudness normalisation. |
 | **Upscale 2x / 4x** | Lanczos with a light sharpen (fast), FSRCNN (bundled, moderate) or EDSR (photos only, downloaded once, 38 MB per scale, best detail). Video frames stream through FFmpeg pipes; the thumbnail and the ETA show what to expect. |
-| **Convert** | Video to MP4, MKV, WebM, MOV, GIF, or its audio track to MP3, M4A, Opus, FLAC, WAV; photos between JPEG, PNG, WebP, AVIF, TIFF, BMP, HEIC; audio between MP3, M4A, Opus, OGG, FLAC, WAV. |
+| **Convert** | Video to MP4, MKV, WebM, MOV, GIF, animated WebP, animated PNG, or its audio track to MP3, M4A, Opus, FLAC, WAV (WAV at the source's bit depth); animated GIF, WebP and PNG keep every frame; photos between JPEG, PNG, WebP, AVIF, TIFF, BMP, HEIC; audio between MP3, M4A, Opus, OGG, FLAC, WAV. |
 | **Clean outputs** | **Remove metadata** is on per file by default: no tags, chapters or encoder names in the output. Off copies the source metadata as far as the target format allows. |
 | **Per-file settings** | Every file opens its own panel; **Apply to all video / photos / audio** copies one file's settings to the others; the defaults for new files live in Settings. |
-| **Batch input** | Drag and drop of files and folders with all their subfolders, several at once; a native multi-select dialog; duplicates are added once. Up to three files run in parallel. |
-| **Outputs** | Next to the source or into one folder; a numbered suffix instead of an overwrite; **Show in folder**, **Open**, **Run again**; an optional folder opening and a sound when a batch finishes. |
+| **Batch input** | Drag and drop of files and folders with all their subfolders, several at once; **Open with** and **Send to** from Explorer; a native multi-select dialog; duplicates are added once. Up to three files run in parallel. |
+| **Outputs** | Next to the source or into one folder, where a dropped folder's subfolders are mirrored; the source's file dates kept; a numbered suffix instead of an overwrite; **Show in folder**, **Open**, **Run again**; an optional folder opening and a sound when a batch finishes. |
 | **Liquid Glass UI** | A resizable window (3:4 portrait at first, its size and position remembered) with refracting glass controls, spring motion and an animated background in one of four colour themes (Dusk, Nova, Frost, Bloom); a Scale setting from 100 to 200 %; embedded Sora and Geist Mono fonts; animation stops when nothing moves. |
 | **Self-updating app** | New releases are detected on launch and then every 5 minutes, downloaded in the background (or on **Download**), verified by size and SHA-256 and installed on **Restart**. |
 
