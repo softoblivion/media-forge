@@ -554,6 +554,26 @@ class DropTest(BridgeTestBase):
         self.assertEqual(self.events("toast")[-1][1]["message"],
                          "The folder is too large to read in full; the first 3 media files found were added.")
 
+    def test_the_walk_notice_counts_only_the_files_the_walk_added(self):
+        given = self.touch("given.mp4")
+        for n in range(3):
+            self.touch(f"big/f{n}.mp4")
+        with mock.patch.object(bridge_mod, "MAX_WALK_FILES", 1):
+            self.bridge._on_drop(self.drop_event(given, str(self.tmp / "big")))
+        self.assertEqual([i["name"] for i in self.events("items_added")[-1][1]["items"]], ["given.mp4", "f0.mp4"])
+        self.assertEqual(self.events("toast")[-1][1]["message"],
+                         "The folder is too large to read in full; the first 1 media files found were added.")
+
+    def test_a_walk_that_finds_nothing_beside_given_files_says_so(self):
+        given = self.touch("given.mp4")
+        for n in range(5):
+            self.touch(f"big/n{n}.txt")
+        with mock.patch.object(bridge_mod, "MAX_WALK_ENTRIES", 3):
+            self.bridge._on_drop(self.drop_event(given, str(self.tmp / "big")))
+        self.assertEqual([i["name"] for i in self.events("items_added")[-1][1]["items"]], ["given.mp4"])
+        self.assertEqual(self.events("toast")[-1][1]["message"],
+                         "The folder is too large to read in full; no media files were found in the part that was read.")
+
     def test_a_walk_that_stops_before_any_media_file_says_so(self):
         for n in range(5):
             self.touch(f"big/n{n}.txt")

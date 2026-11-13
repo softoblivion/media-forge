@@ -142,9 +142,11 @@ MSG_WALK_STOPPED_EMPTY = "The folder is too large to read in full; no media file
 
 
 class Expanded(list):
-    """The `(path, sub-folder)` pairs of `expand_paths`; `truncated` is True when a folder walk stopped at a limit."""
+    """The `(path, sub-folder)` pairs of `expand_paths`; `truncated` is True when a folder walk stopped at a limit;
+    `walked` counts the files the folder walks added (files given directly are not counted)."""
 
     truncated = False
+    walked = 0
 
 
 def _folder_key(path: str) -> str:
@@ -213,6 +215,7 @@ def expand_paths(paths: Iterable[str], skip_folder: str | None = None, max_files
             walk(path)
         else:
             add(path, "")
+    out.walked = max_files - budget["files"]
     return out
 
 
@@ -549,8 +552,8 @@ class Bridge:
         expanded = expand_paths(paths, skip_folder=folder if isinstance(folder, str) and folder else None,
                                 max_files=MAX_WALK_FILES, max_entries=MAX_WALK_ENTRIES)
         if expanded.truncated:
-            log.info("the folder walk stopped at its limit after %d media files", len(expanded))
-            self._toast(MSG_WALK_STOPPED.format(n=len(expanded)) if expanded else MSG_WALK_STOPPED_EMPTY)
+            log.info("the folder walk stopped at its limit after %d media files", expanded.walked)
+            self._toast(MSG_WALK_STOPPED.format(n=expanded.walked) if expanded.walked else MSG_WALK_STOPPED_EMPTY)
         return expanded
 
     def _add_expanded(self, expanded: list[tuple[str, str]]) -> list:
