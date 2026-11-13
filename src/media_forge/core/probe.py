@@ -11,6 +11,7 @@ import io
 import json
 import logging
 import math
+import mmap
 import os
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -45,6 +46,7 @@ _IMAGE_PIPE_FORMATS = ("image2", "png_pipe", "jpeg_pipe", "webp_pipe", "bmp_pipe
 ANIMATED_IMAGES = {"GIF": "gif", "WEBP": "webp", "PNG": "apng"}
 ANIMATED_CODECS = ("gif", "webp_anim", "apng")
 MAX_ANIMATION_RATE = 100  # an animation's exact frame grid above this rate falls back to the probed rate
+_APNG_MAX_DEN = 65535  # an APNG frame delay is delay_num / delay_den seconds, both 16-bit
 ALPHA_PIX_FMTS = ("argb", "rgba", "abgr", "bgra", "yuva420p", "rgba64be", "rgba64le", "ya8", "ya16be", "ya16le")
 
 
@@ -231,20 +233,87 @@ def info_from_image(path: Path) -> ProbeInfo | None:
     return info
 
 
-def animation_timing(path: Path) -> tuple[list[int], int] | None:
-    """(frame durations in ms, plays) Pillow reads from an animated image; plays 0 = for ever. None when unreadable.
+def exact_ms(value: Any) -> Fraction:
+    """A frame duration in ms as an exact fraction. GIF and WebP store whole ms (or centiseconds); an APNG stores
+    delay_num / delay_den seconds with a denominator of at most 65535, which Pillow hands over as a float of ms
+    (33.333... for 1/30 s): the nearest fraction with such a denominator recovers the stored value."""
+    if not value or value < 0:
+        return Fraction(0)
+    if isinstance(value, (int, Fraction)):
+        return Fraction(value)
+    return Fraction(float(value) / 1000).limit_denominator(_APNG_MAX_DEN) * 1000
 
-    A GIF without a loop block plays once; its loop value N repeats N times after the first play (N + 1 plays, as
-    browsers show it). WebP and APNG count the plays themselves, 0 = for ever."""
+
+def _gif_delays(path: Path) -> list[Fraction] | None:
+    """Each GIF frame's delay in ms, read from the Graphic Control Extensions without decoding any image (Pillow
+    decodes every earlier frame on a seek, CORE.md 2). A frame without such a block gets 0, as Pillow gives it.
+    None when the block structure cannot be walked; the caller then decodes."""
+    with open(path, "rb") as fh:
+        if os.fstat(fh.fileno()).st_size < 13:
+            return None
+        with mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ) as data:
+            size = len(data)
+            if data[:3] != b"GIF":
+                return None
+
+            def skip_blocks(pos: int) -> int:  # past a chain of data sub-blocks and its 0 terminator
+                while pos < size:
+                    length = data[pos]
+                    pos += 1 + length
+                    if length == 0:
+                        return pos
+                return size
+
+            flags = data[10]
+            pos = 13 + (3 << ((flags & 7) + 1) if flags & 0x80 else 0)
+            delays: list[Fraction] = []
+            delay: Fraction | None = None
+            while pos < size:
+                tag = data[pos]
+                pos += 1
+                if tag == 0x3B:  # trailer
+                    break
+                if tag == 0x21:  # extension: label, then sub-blocks
+                    if pos >= size:
+                        break
+                    label = data[pos]
+                    pos += 1
+                    if label == 0xF9 and pos < size:  # graphic control: flags, delay (cs, little endian), index
+                        if data[pos] < 3 or pos + 4 > size:
+                            return None
+                        delay = Fraction((data[pos + 2] | data[pos + 3] << 8) * 10)
+                    pos = skip_blocks(pos)
+                elif tag == 0x2C:  # image descriptor, optional local colour table, LZW code size, image data
+                    if pos + 9 > size:
+                        break
+                    image_flags = data[pos + 8]
+                    pos += 9 + (3 << ((image_flags & 7) + 1) if image_flags & 0x80 else 0) + 1
+                    delays.append(delay if delay is not None else Fraction(0))
+                    delay = None
+                    pos = skip_blocks(pos)
+                # any other byte is skipped, as Pillow's reader skips it
+            return delays
+
+
+def animation_timing(path: Path, frames: int | None = None) -> tuple[list[Fraction], int] | None:
+    """(exact frame durations in ms, plays) of an animated image; plays 0 = for ever. None when unreadable.
+
+    `frames` is Pillow's frame count when the caller already has it (counting walks a whole GIF again). GIF delays
+    are read from the file's blocks without decoding; WebP and APNG frames are decoded, since Pillow sets their
+    durations only then. A GIF without a loop block plays once; its loop value N repeats N times after the first
+    play (N + 1 plays, as browsers show it). WebP and APNG count the plays themselves, 0 = for ever."""
     try:
         with Image.open(path) as img:
-            durations: list[int] = []
-            for index in range(int(getattr(img, "n_frames", 1) or 1)):
-                img.seek(index)
-                img.load()  # the WebP reader sets a frame's duration when it decodes the frame
-                durations.append(int(img.info.get("duration") or 0))
-            loop = img.info.get("loop")
+            frames = int(frames or getattr(img, "n_frames", 1) or 1)
             is_gif = img.format == "GIF"
+            durations = _gif_delays(path) if is_gif else None
+            if durations is None or len(durations) != frames:
+                durations = []
+                for index in range(frames):
+                    img.seek(index)
+                    img.load()  # the WebP reader sets a frame's duration when it decodes the frame
+                    durations.append(exact_ms(img.info.get("duration")))
+            loop = img.info.get("loop")
     except Exception:  # noqa: BLE001
         return None
     if is_gif:
@@ -254,13 +323,16 @@ def animation_timing(path: Path) -> tuple[list[int], int] | None:
     return durations, plays
 
 
-def animation_rate(durations: list[int]) -> str | None:
-    """The lowest frame rate on whose grid every frame boundary falls ("10" for 100 / 200 / 300 / 400 ms), as an
-    ffmpeg rate; None when that rate is above `MAX_ANIMATION_RATE` or a duration is unknown."""
-    if not durations or any(d <= 0 for d in durations):
+def animation_rate(durations: list) -> str | None:
+    """The lowest frame rate on whose grid every frame boundary falls ("10" for 100 / 200 / 300 / 400 ms, "30" for
+    frames of 100/3 ms), as an ffmpeg rate; None when that rate is above `MAX_ANIMATION_RATE` or a duration is
+    unknown. Durations are ms, whole or exact fractions (`exact_ms`)."""
+    exact = [exact_ms(d) for d in durations or ()]
+    if not exact or any(d <= 0 for d in exact):
         return None
-    step = math.gcd(*durations)
-    rate = Fraction(1000, step)
+    den = math.lcm(*(d.denominator for d in exact))
+    step = Fraction(math.gcd(*(int(d * den) for d in exact)), den)
+    rate = 1000 / step
     if rate > MAX_ANIMATION_RATE:
         return None
     return str(rate.numerator) if rate.denominator == 1 else f"{rate.numerator}/{rate.denominator}"
@@ -288,15 +360,16 @@ def probe(path: str | os.PathLike, ffprobe: str | None) -> ProbeInfo:
                 video.format = ANIMATED_IMAGES[info.format]
                 video.nb_frames = video.nb_frames or info.n_frames
                 video.has_alpha = info.has_alpha or (video.pix_fmt or "") in ALPHA_PIX_FMTS
-                timing = animation_timing(p)
+                timing = animation_timing(p, info.n_frames)
                 if timing is not None:
                     durations, plays = timing
                     video.extra["anim_plays"] = plays
                     video.extra["anim_rate"] = animation_rate(durations)
                     if durations and durations[-1] > 0:
-                        video.extra["anim_last_s"] = durations[-1] / 1000.0
-                    if video.duration is None and sum(durations) > 0:  # the WebP and APNG demuxers give none
-                        video.duration = round(sum(durations) / 1000.0, 3)
+                        video.extra["anim_last_s"] = float(durations[-1]) / 1000.0
+                    total = sum(durations)
+                    if video.duration is None and total > 0:  # the WebP and APNG demuxers give none
+                        video.duration = round(float(total) / 1000.0, 3)
                         if size:
                             video.bitrate = int(size * 8 / video.duration)
                 return video

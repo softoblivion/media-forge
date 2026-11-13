@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import base64
 import io
+import json
+import subprocess
 import unittest
+from fractions import Fraction
+from pathlib import Path
+from unittest import mock
 
-from PIL import Image
+from PIL import GifImagePlugin, Image
 
-from media_forge.core import probe
+from media_forge.core import catalog, probe, video
 from media_forge.core.errors import UserError
 
-from tests.core_support import FFMPEG, FFPROBE, ScratchCase, media, needs_ffmpeg
+from tests.core_support import FFMPEG, FFPROBE, FakeCtx, ScratchCase, caps, media, needs_ffmpeg
 
 
 def _thumb_image(url: str) -> Image.Image:
@@ -108,6 +113,96 @@ class ProbeTest(ScratchCase):
     def test_image_without_ffprobe(self):
         info = probe.probe(media("photo.png"), None)
         self.assertEqual(info.kind, "image")
+
+
+def decoded_durations(path) -> list[Fraction]:
+    """Frame durations as Pillow gives them after decoding each frame, made exact (an APNG delay has a denominator
+    of at most 65535)."""
+    with Image.open(path) as img:
+        out = []
+        for index in range(img.n_frames):
+            img.seek(index)
+            img.load()
+            ms = img.info.get("duration") or 0
+            out.append(Fraction(ms) if isinstance(ms, int) else Fraction(ms / 1000).limit_denominator(65535) * 1000)
+        return out
+
+
+@needs_ffmpeg
+class AnimationTimingTest(ScratchCase):
+    def test_frame_rate_and_duration_are_exact(self):
+        cases = (  # file, frames, rate, duration (s), last frame (s)
+            ("anim30.png", 60, "30", 2.0, 1 / 30),
+            ("anim24.png", 48, "24", 2.0, 1 / 24),
+            ("anim_steps.webp", 4, "10", 1.0, 0.4),
+            ("anim_steps.png", 4, "10", 1.0, 0.4),
+            ("anim30.gif", 60, "100", 2.0, None),  # a GIF stores centiseconds: 30 fps is written as 3 / 4 / 3 cs
+        )
+        for name, frames, rate, duration, last in cases:
+            with self.subTest(name=name):
+                info = probe.probe(media(name), FFPROBE)
+                self.assertEqual(info.kind, "video")
+                self.assertEqual(info.extra["anim_rate"], rate)
+                self.assertEqual(info.duration, duration)
+                durations, _ = probe.animation_timing(media(name))
+                self.assertEqual(len(durations), frames)
+                self.assertEqual(sum(durations), Fraction(int(duration * 1000)))
+                if last is not None:
+                    self.assertAlmostEqual(info.extra["anim_last_s"], last, places=9)
+
+    def test_rate_over_exact_durations(self):
+        third = Fraction(100, 3)
+        self.assertEqual(probe.animation_rate([third] * 60), "30")
+        self.assertEqual(probe.animation_rate([33.333333333333336] * 3), "30")  # Pillow's float for 1/30 s
+        self.assertEqual(probe.animation_rate([41.666666666666664, 83.33333333333333]), "24")
+        self.assertEqual(probe.animation_rate([Fraction(1001, 30)] * 2), "30000/1001")
+        self.assertIsNone(probe.animation_rate([third, Fraction(125, 3)]))  # a 25/3 ms grid is 120 fps: over the cap
+        self.assertEqual(probe.animation_rate([100, 200, 300, 400]), "10")
+
+    def test_gif_delays_are_read_without_decoding(self):
+        for name in ("anim30.gif", "anim_mixed.gif", "anim_once.gif", "anim.gif"):
+            with self.subTest(name=name):
+                expected = decoded_durations(media(name))
+                original = GifImagePlugin.GifImageFile.load
+                with mock.patch.object(GifImagePlugin.GifImageFile, "load", autospec=True,
+                                       side_effect=original) as load:
+                    durations, _ = probe.animation_timing(media(name))
+                self.assertEqual(load.call_count, 0)
+                self.assertEqual(durations, expected)
+        self.assertEqual(probe.animation_timing(media("anim_mixed.gif")),
+                         ([Fraction(120), Fraction(0), Fraction(250), Fraction(30)], 0))
+
+    def test_gif_falls_back_to_decoding_when_the_blocks_do_not_match(self):
+        with mock.patch.object(probe, "_gif_delays", create=True, return_value=[Fraction(10)]):
+            durations, plays = probe.animation_timing(media("anim_mixed.gif"))
+        self.assertEqual(durations, decoded_durations(media("anim_mixed.gif")))
+        self.assertEqual(plays, 0)
+
+    def convert(self, name: str, fmt: str):
+        info = probe.probe(media(name), FFPROBE)
+        settings = catalog.normalize("video", {"format": fmt, "encoder": "cpu"}, caps())
+        out = self.out_path(f"{Path(name).stem}_{Path(name).suffix[1:]}.{fmt}")
+        video.run_video(media(name), info, settings, caps(), FFMPEG, out, self.paths.job_cache(out.stem), FakeCtx(),
+                        None)
+        return out
+
+    def test_converted_animation_keeps_its_frames_and_time(self):
+        """A 30 fps APNG becomes a WebP and an MP4 of the same 60 frames and 2.000 s."""
+        for name in ("anim30.png",):
+            with self.subTest(name=name, fmt="webp"):
+                out = self.convert(name, "webp")
+                durations = decoded_durations(out)
+                self.assertEqual(len(durations), 60)
+                # WebP stores whole ms and the encoder floors each frame start: 0, 33, 66, 100, ... 1966 + 33
+                self.assertAlmostEqual(float(sum(durations)), 2000, delta=1)
+            with self.subTest(name=name, fmt="mp4"):
+                out = self.convert(name, "mp4")
+                data = json.loads(subprocess.run(
+                    [FFPROBE, "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries",
+                     "stream=nb_read_frames:format=duration", "-of", "json", str(out)],
+                    capture_output=True, text=True, check=True).stdout)
+                self.assertEqual(int(data["streams"][0]["nb_read_frames"]), 60)
+                self.assertAlmostEqual(float(data["format"]["duration"]), 2.0, places=3)
 
 
 if __name__ == "__main__":

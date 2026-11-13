@@ -130,6 +130,14 @@ def _make(name: str, path: Path) -> None:
                   for i in range(4)]
         extra = {} if name == "anim_once.gif" else {"loop": 3}
         frames[0].save(path, save_all=True, append_images=frames[1:], duration=[100, 200, 300, 400], **extra)
+    elif name in ("anim30.png", "anim24.png", "anim30.gif"):  # 2 s at 30 or 24 fps, every frame differs (ffmpeg)
+        rate = 24 if name == "anim24.png" else 30
+        fmt = ["-f", "apng", "-plays", "0"] if name.endswith(".png") else []
+        _ff("-f", "lavfi", "-i", f"nullsrc=size=64x48:rate={rate},format=rgb24,geq=r='mod(N*8+X,256)':g='Y*4':b='N*4'",
+            "-t", "2", *fmt, str(path))
+    elif name == "anim_mixed.gif":  # 120 / 0 / 250 / 30 ms frames, local palettes, a frame without a delay block
+        frames = [Image.new("RGB", (64, 48), (i * 60, 200 - i * 40, 90)) for i in range(4)]
+        frames[0].save(path, save_all=True, append_images=frames[1:], duration=[120, 0, 250, 30], loop=0)
     elif name == "notmedia.mp4":
         path.write_bytes(b"this is not a media file\n" * 10)
     elif name in ("photo.jpg", "photo.png", "photo_exif.jpg", "photo_xmp_orient.jpg", "single.gif", "photo.webp", "photo.bmp",
