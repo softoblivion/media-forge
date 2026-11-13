@@ -69,8 +69,8 @@ class FakeUpdater:
     def check_background(self):
         self.calls.append("check")
 
-    def download_background(self, auto=False):
-        self.calls.append("auto-download" if auto else "download")
+    def download_background(self):
+        self.calls.append("download")
         if self._status["stage"] == "available":
             self._status["stage"] = "downloading"
 
@@ -567,30 +567,23 @@ class UpdateWiringTest(BridgeTestBase):
         self.assertNotIn("download", updater.calls)
         self.bridge.set_settings({"auto_download_updates": True})  # turning it on downloads the found release
         deadline = time.monotonic() + 2
-        while "auto-download" not in updater.calls and time.monotonic() < deadline:
+        while "download" not in updater.calls and time.monotonic() < deadline:
             time.sleep(0.02)
-        self.assertIn("auto-download", updater.calls)
+        self.assertIn("download", updater.calls)
 
-    def test_new_major_is_never_downloaded_in_the_background(self):
+    def test_newer_major_is_downloaded_in_the_background_like_any_update(self):
         updater = FakeUpdater(stage="available")
+        updater._status.update(latest="1.0.0")  # the bridge runs 0.1.0: a greater major
         self.bridge._attach_updater(updater)
-        self.bridge._on_update_status({"stage": "available", "latest": "3.0.0", "major": True})
-        self.bridge.set_settings({"auto_download_updates": False})
-        updater._status.update(latest="3.0.0", major=True)
-        self.bridge.set_settings({"auto_download_updates": True})  # turning it on does not download a major
-        time.sleep(0.3)
-        self.assertEqual([c for c in updater.calls if "download" in c], [])
-        self.assertEqual(self.events("update")[-1][1]["major"], True)
-        self.bridge.download_update()  # the user's "Switch to 3.0"
-        self.assertEqual(updater.calls[-1], "download")
+        self.bridge._on_update_status(updater.status())
+        deadline = time.monotonic() + 2
+        while "download" not in updater.calls and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertEqual(updater.calls, ["download"])
 
-    def test_skipped_major_is_saved_through_set_settings(self):
-        self.assertIsNone(self.bridge.get_settings()["skipped_major"])
-        self.assertEqual(self.bridge.set_settings({"skipped_major": 3})["skipped_major"], 3)
-        self.assertIsNone(self.bridge.set_settings({"skipped_major": None})["skipped_major"])
-
-    def test_default_update_status_has_no_major(self):
-        self.assertIs(self.bridge.update_status()["major"], False)
+    def test_default_update_status_has_the_status_fields(self):
+        from media_forge.vendor.selfupdate import UpdateStatus
+        self.assertEqual(set(self.bridge.update_status()), set(UpdateStatus.__annotations__))
 
     def test_settings_changes_leave_the_scheduler_alone(self):
         scheduler = FakeScheduler()

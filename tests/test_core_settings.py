@@ -133,25 +133,18 @@ class SettingsTest(ScratchCase):
         self.assertIs(s.load()["keep_file_dates"], False)  # survives a restart
         self.assertIs(s.patch({"keep_file_dates": "yes"})["keep_file_dates"], False)  # a non-bool keeps the value
 
-    def test_skipped_major_is_persisted(self):
-        s = self.fresh("skipped_major")
-        self.assertIsNone(s.load()["skipped_major"])  # absent from older files: nothing skipped
-        self.assertEqual(s.patch({"skipped_major": 3})["skipped_major"], 3)
-        self.assertEqual(json.loads(s.paths.settings_file.read_text(encoding="utf-8"))["skipped_major"], 3)
-        self.assertEqual(s.load()["skipped_major"], 3)  # survives a restart
-        self.assertIsNone(s.patch({"skipped_major": None})["skipped_major"])
-        self.assertIsNone(s.load()["skipped_major"])
-
-    def test_skipped_major_values(self):
-        from media_forge.core.settings import normalize_major
-        for value, want in ((3, 3), (10, 10), (3.0, 3), ("4", 4), (0, None), (-1, None), (True, None), (None, None),
-                            ("x", None), (2.5, None), ([3], None)):
-            self.assertEqual(normalize_major(value), want, value)
-        s = self.fresh("skipped_major_bad")
-        s.paths.settings_file.write_text(json.dumps({"skipped_major": "junk", "suffix": "_x"}), encoding="utf-8")
+    def test_skipped_major_of_older_versions_is_dropped(self):
+        s = self.fresh("old_skipped_major")
+        text = json.dumps({"version": 1, "skipped_major": 3, "auto_download_updates": True, "suffix": "_x"})
+        s.paths.settings_file.write_text(text, encoding="utf-8")
         data = s.load()
-        self.assertIsNone(data["skipped_major"])
-        self.assertEqual(data["suffix"], "_x")
+        self.assertNotIn("skipped_major", data)
+        self.assertEqual((data["suffix"], data["auto_download_updates"]), ("_x", True))
+        self.assertFalse(s.paths.settings_file.with_name("settings.json.bad").exists())
+        self.assertNotIn("skipped_major", s.patch({"skipped_major": 4, "parallel_jobs": 2}))
+        stored = json.loads(s.paths.settings_file.read_text(encoding="utf-8"))
+        self.assertNotIn("skipped_major", stored)  # not written back
+        self.assertEqual(stored["parallel_jobs"], 2)
 
     def test_interval_key_of_older_versions_is_dropped(self):
         s = self.fresh("old_interval")

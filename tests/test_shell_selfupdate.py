@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
+import hashlib
+import json
 import shutil
 import sys
 import tempfile
@@ -46,7 +49,10 @@ class AdapterTest(unittest.TestCase):
     def test_reexports_are_the_vendored_objects(self):
         self.assertIs(selfupdate.SelfUpdater, vendored.SelfUpdater)
         self.assertIs(selfupdate.run_apply, vendored.run_apply)
-        self.assertEqual(vendored.__version__, "0.4.0")
+        self.assertEqual(vendored.__version__, "0.5.0")
+        for gone in ("is_major_upgrade", "major_of"):
+            self.assertFalse(hasattr(vendored, gone), gone)
+        self.assertNotIn("major", vendored.UpdateStatus.__annotations__)
 
     def test_config_from_source(self):
         statuses = []
@@ -108,6 +114,80 @@ class AdapterTest(unittest.TestCase):
             self.assertEqual(main.main(["--apply-update", "123", "C:\\x\\MediaForge.exe"]), 0)
         run_apply.assert_called_once_with(["123", "C:\\x\\MediaForge.exe"])
         mutex.assert_not_called()
+
+
+class ReleaseNet:
+    """Canned release of the GitHub API format: get_text answers the release JSON and SHA256SUMS, download writes
+    the payload. No network."""
+
+    def __init__(self, tag: str, payload: bytes):
+        self.payload = payload
+        base = f"https://github.com/{selfupdate.REPO}/releases/download/{tag}"
+        self.texts = {
+            f"https://api.github.com/repos/{selfupdate.REPO}/releases/latest": json.dumps({
+                "tag_name": tag, "body": "## Changed\n- things", "published_at": "2026-11-13T10:00:00Z",
+                "assets": [{"name": name, "size": len(payload) if name == selfupdate.ASSET_NAME else 100,
+                            "browser_download_url": f"{base}/{name}"}
+                           for name in (selfupdate.ASSET_NAME, "SHA256SUMS")]}),
+            f"{base}/SHA256SUMS": f"{hashlib.sha256(payload).hexdigest()}  {selfupdate.ASSET_NAME}\n",
+        }
+        self.downloads: list[str] = []
+
+    def get_text(self, url):
+        if url not in self.texts:
+            raise OSError(f"{url}: HTTP 404")
+        return self.texts[url]
+
+    def download(self, url, dest, on_progress=None):
+        self.downloads.append(url)
+        Path(dest).write_bytes(self.payload)
+        if on_progress:
+            on_progress(len(self.payload), len(self.payload))
+        return hashlib.sha256(self.payload).hexdigest()
+
+
+class NewerMajorTest(unittest.TestCase):
+    """A release with a greater major version is an ordinary update: the bridge's automatic download fetches it."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="mf_shell_major_"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def test_newer_major_with_automatic_download_is_downloaded_and_becomes_ready(self):
+        from media_forge.shell.bridge import Bridge, EventPump
+        from tests.shell_fake_engine import FakeEngine
+
+        pump = EventPump(threaded=False)
+        self.addCleanup(pump.stop)
+        engine = FakeEngine(pump.emit, "2.4.0", probe_delay=None)
+        self.assertIs(engine.get_settings()["auto_download_updates"], True)  # the default
+        bridge = Bridge(engine, pump, "2.4.0")
+        exe = self.tmp / "app" / "MediaForge.exe"
+        exe.parent.mkdir()
+        exe.write_bytes(b"OLD-EXE")
+        net = ReleaseNet("v3.0.0", b"MZ" + b"new-exe" * 1000)
+        config = dataclasses.replace(
+            selfupdate.build_config(Paths(self.tmp / "home", exe_path=exe), "2.4.0", bridge._on_update_status,
+                                    bridge._on_update_toast), net=net)
+        spawned = []
+        updater = selfupdate.SelfUpdater(config, spawn=lambda *args: spawned.append(args))
+        bridge._attach_updater(updater)
+
+        found = bridge.check_updates()
+        deadline = time.monotonic() + 5
+        while updater.status()["stage"] != "ready" and time.monotonic() < deadline:
+            time.sleep(0.02)
+        status = updater.status()
+        self.assertIn(found["stage"], ("checking", "available", "downloading", "ready"))
+        self.assertEqual((status["stage"], status["latest"], status["message"], status["can_apply"]),
+                         ("ready", "3.0.0", "Version 3.0.0 is ready to install", True))
+        self.assertEqual(net.downloads, [f"https://github.com/{selfupdate.REPO}/releases/download/v3.0.0/"
+                                         f"{selfupdate.ASSET_NAME}"])
+        stages = [payload["stage"] for name, payload in pump.pending() if name == "update"]
+        self.assertIn("available", stages)
+        self.assertEqual(stages[-1], "ready")
+        self.assertTrue(updater.apply(launch=False))
+        self.assertEqual(Path(spawned[0][0]).name, "MediaForge-3.0.0.exe")
 
 
 if __name__ == "__main__":

@@ -43,7 +43,6 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "open_when_done": False,
     "sound_when_done": True,
     "auto_download_updates": True,
-    "skipped_major": None,   # the new major version the user chose to stay away from (kit 10.2), or None
     "theme": "nova",
     "ui_scale": DEFAULT_SCALE,
     "window_bounds": None,   # the window's last position (physical px) and size (logical px), or None
@@ -80,17 +79,6 @@ def normalize_scale(value: Any) -> int:
     if number != number or number <= 0:
         return DEFAULT_SCALE
     return min(SCALE_STEPS, key=lambda step: (abs(step - number), -step))
-
-
-def normalize_major(value: Any) -> int | None:
-    """`skipped_major`: a whole number of at least 1 (an integral float or a digit string is accepted), else None."""
-    if isinstance(value, bool) or value is None:
-        return None
-    if isinstance(value, str) and value.strip().isdigit():
-        value = int(value.strip())
-    if isinstance(value, float) and value.is_integer():
-        value = int(value)
-    return value if isinstance(value, int) and value >= 1 else None
 
 
 def default_settings() -> dict[str, Any]:
@@ -141,8 +129,6 @@ def validate(current: Mapping[str, Any], patch: Mapping[str, Any],
             new[key] = value if value in THEMES else GLOBAL_DEFAULTS[key]
         elif key == "ui_scale":
             new[key] = normalize_scale(value)
-        elif key == "skipped_major":
-            new[key] = normalize_major(value)
         elif key == "window_bounds":
             new[key] = normalize_window_bounds(value)
         else:  # booleans
