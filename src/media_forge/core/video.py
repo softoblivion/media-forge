@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -26,7 +27,6 @@ RC_RANGE = {"h264": (0, 51), "h265": (0, 51), "av1": (0, 63), "vp9": (0, 63)}
 NVENC = {"h264": "h264_nvenc", "h265": "hevc_nvenc", "av1": "av1_nvenc"}
 MUXERS = {"mp4": "mp4", "mkv": "matroska", "webm": "webm", "mov": "mov", "gif": "gif", "webp": "webp",
           "apng": "apng"}
-LOOP_ARGS = {"gif": ["-loop", "0"], "webp": ["-loop", "0"], "apng": ["-plays", "0"]}  # repeat for ever
 # audio codecs a container takes as a stream copy (None = any)
 AUDIO_COPY_OK: dict[str, set[str] | None] = {
     "mp4": {"aac", "mp3"},
@@ -211,6 +211,12 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
     encoder = "cpu" if animated else resolve_encoder(codec, settings["encoder"], caps, force_cpu)
     plan.encoder = encoder if codec in NVENC else "cpu"
     src_fps = info.fps or 30.0
+    # an animated image (GIF, WebP, APNG source) carries its own frame times: its exact rate grid keeps every
+    # frame's duration, the last one included, where a plain re-encode would end at the last frame's start
+    anim_source = "anim_plays" in info.extra
+    anim_rate = (info.extra.get("anim_rate") or info.fps_str) if anim_source else None
+    if anim_rate:
+        src_fps = float(Fraction(anim_rate))
     fps_choice = settings["fps"]
     fps_out = float(fps_choice) if fps_choice != "keep" else src_fps
     if is_gif:
@@ -228,15 +234,19 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
     if plan.size_limit_bytes is not None:
         budget = float(limit) * 1024 * 1024 * 8 * BUDGET_MARGIN
         total_kbps = budget / float(duration) / 1000.0
+        audio_refitted = False
         if with_audio and (audio_fit or total_kbps - audio_kbps < LOW_KBPS_FIT):
             # the audio (often a copied lossless track) leaves the video too little room: encode it lower
             fitted = _fitted_audio_kbps(total_kbps, audio_kbps, forced=audio_fit and not info.audio_bitrate)
             if fitted is not None:
                 audio_args, audio_kbps = _encode_audio_args(fmt, fitted), float(fitted)
+                audio_refitted = audio_fit
                 plan.notes.append(f"audio re-encoded at {fitted} kbps to leave room for the video")
         audio_bits = audio_kbps * 1000.0 * float(duration)
         kbps = max(MIN_VIDEO_KBPS, int(math.floor((budget - audio_bits) / float(duration) / 1000.0)))
-        if video_kbps is not None:
+        if video_kbps is not None and not audio_refitted:
+            # the retry's video rate, scaled by the overshoot; a retry that re-encodes a copied track instead keeps
+            # the budget minus the new audio rate, since the overshoot came from that track's unknown size
             kbps = max(MIN_VIDEO_KBPS // 2, int(video_kbps))
         if kbps < LOW_KBPS_FIT and not factor and min(w, h) > 720 and (fit is None or fit > 720):
             fit = 720
@@ -268,6 +278,8 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
             filters.append("format=" + _pix_fmt(codec, encoder, info, model_upscale))
             if fps_choice != "keep":
                 filters.append(f"fps={fps_choice}")
+            elif anim_rate and fmt != "apng" and not model_upscale:
+                filters.append(f"fps={anim_rate}")  # APNG keeps the source frames and gets -final_delay instead
     vf = ",".join(filters)
     if is_gif:
         vf = (vf + "," if vf else "") + GIF_PALETTE
@@ -276,16 +288,20 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
     tail_args: list[str] = []
     if fmt in ("mp4", "mov"):
         tail_args += ["-movflags", "+faststart"]
-    tail_args += LOOP_ARGS.get(fmt, [])
+    tail_args += _loop_args(fmt, int(info.extra.get("anim_plays", 0)))
+    if fmt == "apng" and anim_source and fps_choice == "keep" and not model_upscale and info.extra.get("anim_last_s"):
+        tail_args += ["-final_delay", f"{float(info.extra['anim_last_s']):g}"]
     tail_args += ["-f", MUXERS[fmt], str(out)]
     hw = ["-hwaccel", "auto"] if encoder == "gpu" and not model_upscale else []
 
     if model_upscale:
         plan.kind = "pipeline"
         matrix = color_matrix(info)
-        fps_str = info.fps_str or _fps_text(src_fps)
+        fps_str = anim_rate or info.fps_str or _fps_text(src_fps)
+        # the fps filter of an animation holds its last frame for that frame's own time (-r alone ends at its start)
+        dec_fps = f"fps={anim_rate}," if anim_rate else ""
         decoder = [ffmpeg, "-hide_banner", "-nostdin", "-v", "error", "-i", str(src), "-map", "0:v:0", "-an", "-sn",
-                   "-dn", "-vf", f"scale=in_color_matrix={matrix}:flags=lanczos+accurate_rnd+full_chroma_int",
+                   "-dn", "-vf", f"{dec_fps}scale=in_color_matrix={matrix}:flags=lanczos+accurate_rnd+full_chroma_int",
                    "-fps_mode", "cfr", "-r", fps_str, "-f", "rawvideo", "-pix_fmt", "bgr24", "-"]
         enc_filters = [f"scale=out_color_matrix={matrix}:flags=lanczos+accurate_rnd+full_chroma_int"] + filters
         enc_vf = ",".join(enc_filters)
@@ -341,6 +357,18 @@ def plan_video(src: Path, info: ProbeInfo, settings: Mapping[str, Any], caps: Ma
 
 def _fps_text(fps: float) -> str:
     return str(int(fps)) if float(fps).is_integer() else f"{fps:.3f}"
+
+
+def _loop_args(fmt: str, plays: int) -> list[str]:
+    """Loop arguments of an animated output for `plays` plays (0 = for ever, the source's count): the GIF muxer
+    counts repeats after the first play (-1 = play once), WebP and APNG count plays."""
+    if fmt == "gif":
+        return ["-loop", "0" if plays <= 0 else "-1" if plays == 1 else str(plays - 1)]
+    if fmt == "webp":
+        return ["-loop", str(max(0, plays))]
+    if fmt == "apng":
+        return ["-plays", str(max(0, plays))]
+    return []
 
 
 def _animated_args(fmt: str, quality: int) -> list[str]:

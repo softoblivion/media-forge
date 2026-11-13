@@ -40,6 +40,70 @@ def count_frames(path: Path, codec: str) -> int:
     return int(stream["nb_read_frames"])
 
 
+def image_timing(path: Path) -> tuple[list[int], int | None]:
+    """(frame durations in ms, loop value) of an animated image as Pillow reads them."""
+    from PIL import Image
+
+    with Image.open(path) as img:
+        durations = []
+        for index in range(getattr(img, "n_frames", 1)):
+            img.seek(index)
+            img.load()
+            durations.append(int(round(float(img.info.get("duration") or 0))))
+        return durations, img.info.get("loop")
+
+
+def frame_times(path: Path) -> list[float]:
+    """Presentation times (s) of the decoded frames of the first video stream."""
+    out = subprocess.run([FFPROBE, "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pts_time",
+                          "-of", "csv=p=0", str(path)], capture_output=True, check=True, text=True,
+                         creationflags=procs.CREATE_NO_WINDOW)
+    return [round(float(line), 3) for line in out.stdout.split()]
+
+
+class SizeCapPlanTest(unittest.TestCase):
+    def test_retry_after_a_copied_track_recomputes_the_video_rate(self):
+        """60 s, 10 MB cap, a FLAC track of unknown rate copied into MKV: the retry re-encodes the audio and gives
+        the video the budget minus the new audio rate, not the first rate scaled down by the overshoot."""
+        info = probe.ProbeInfo(kind="video", has_video=True, has_audio=True, width=1920, height=1080,
+                               duration=60.0, fps=30.0, vcodec="h264", acodec="flac", bitrate=3_000_000,
+                               sample_rate=48000, channels=2)
+        s = catalog.normalize("video", dict(catalog.defaults("video"), format="mkv", audio="keep",
+                                            size_limit_mb=10), None)
+        first = video.plan_video(Path("x.mkv"), info, s, None, "ffmpeg", Path("o.mkv"), Path("w"))
+        self.assertTrue(video._copies_audio(first))
+        size = (first.video_kbps + 1000.0) * 1000 / 8 * 60  # the track really takes about 1000 kbps
+        scaled = max(1, int(first.video_kbps * first.size_limit_bytes / size * 0.95))
+        retry = video.plan_video(Path("x.mkv"), info, s, None, "ffmpeg", Path("o.mkv"), Path("w"),
+                                 video_kbps=scaled, audio_fit=True)
+        self.assertFalse(video._copies_audio(retry))
+        budget_kbps = 10 * 1024 * 1024 * 8 * video.BUDGET_MARGIN / 60 / 1000
+        self.assertEqual(retry.video_kbps, int(budget_kbps - 192))
+        self.assertTrue(any("192 kbps" in note for note in retry.notes), retry.notes)
+        expected_mb = (retry.video_kbps + 192) * 1000 / 8 * 60 / 1048576
+        self.assertTrue(9.0 < expected_mb < 10.0, expected_mb)
+        # a retry that keeps the audio as planned still takes the scaled rate
+        plain = video.plan_video(Path("x.mkv"), info, s, None, "ffmpeg", Path("o.mkv"), Path("w"),
+                                 video_kbps=scaled, audio_fit=False)
+        self.assertEqual(plain.video_kbps, scaled)
+
+    def test_loop_arguments_follow_the_play_count(self):
+        self.assertEqual(video._loop_args("gif", 0), ["-loop", "0"])
+        self.assertEqual(video._loop_args("gif", 1), ["-loop", "-1"])
+        self.assertEqual(video._loop_args("gif", 3), ["-loop", "2"])
+        self.assertEqual(video._loop_args("webp", 3), ["-loop", "3"])
+        self.assertEqual(video._loop_args("apng", 0), ["-plays", "0"])
+        self.assertEqual(video._loop_args("mp4", 3), [])
+
+    def test_animation_rate_is_the_frame_grid(self):
+        self.assertEqual(probe.animation_rate([100, 200, 300, 400]), "10")
+        self.assertEqual(probe.animation_rate([40, 40, 80]), "25")
+        self.assertEqual(probe.animation_rate([30, 40]), "100")
+        self.assertEqual(probe.animation_rate([30, 70]), "100")
+        self.assertIsNone(probe.animation_rate([33, 34]))  # a 1 ms grid: the probed rate is used
+        self.assertIsNone(probe.animation_rate([100, 0]))
+
+
 @needs_ffmpeg
 class VideoTest(ScratchCase):
     def run_job(self, src: str, out_name: str, model: Model | None = None, caps_override=None, **settings):
@@ -167,6 +231,31 @@ class VideoTest(ScratchCase):
         with self.assertRaises(UserError) as cm:
             self.run_job("anim.webp", "capped.webp", format="webp", size_limit_mb=1)
         self.assertEqual(cm.exception.message, "This format cannot be limited in size.")
+
+    def test_animated_frame_times_and_plays_are_kept(self):
+        """Unequal frame times, the last one included, and the play count survive into every animated output and
+        into a video; a GIF without a loop block stays a single play."""
+        steps = [100, 200, 300, 400]
+        for src in ("anim_steps.webp", "anim_steps.png"):
+            for fmt in ("webp", "apng", "gif"):
+                with self.subTest(src=src, fmt=fmt):
+                    ext = catalog.output_extension("video", {"format": fmt})
+                    out, _, _ = self.run_job(src, f"steps_{src.replace('.', '_')}_to.{ext}", format=fmt)
+                    durations, loop = image_timing(out)
+                    if fmt == "gif":  # the GIF output is resampled at a constant rate: the total time holds
+                        self.assertEqual(sum(durations), sum(steps), durations)
+                        self.assertEqual(loop, 2)  # a GIF counts repeats after the first play: 3 plays
+                    else:
+                        self.assertEqual(durations, steps)
+                        self.assertEqual(loop, 3)
+            with self.subTest(src=src, fmt="mp4"):
+                out, _, _ = self.run_job(src, f"steps_{src.replace('.', '_')}_to.mp4", format="mp4", encoder="cpu")
+                self.assertEqual(frame_times(out), [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+                self.assertAlmostEqual(float(vstream(ffprobe(out))["duration"]), 1.0, places=2)
+        out, _, _ = self.run_job("anim_once.gif", "once_to.webp", format="webp")
+        self.assertEqual(image_timing(out), (steps, 1))
+        out, _, _ = self.run_job("anim_once.gif", "once_to.gif", format="gif")
+        self.assertIsNone(image_timing(out)[1])  # no loop block: one play
 
     def test_audio_extraction(self):
         out, plan, _ = self.run_job("clip.mp4", "extract.mp3", format="mp3", audio_bitrate_k=128)

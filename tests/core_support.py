@@ -124,6 +124,12 @@ def _make(name: str, path: Path) -> None:
             frames.append(frame)
         extra = {"lossless": False, "quality": 80} if name == "anim.webp" else {}
         frames[0].save(path, save_all=True, append_images=frames[1:], duration=100, loop=0, **extra)
+    elif name in ("anim_steps.webp", "anim_steps.png", "anim_once.gif"):
+        # 4 frames of 100 / 200 / 300 / 400 ms; the WebP and the APNG play 3 times, the GIF has no loop block
+        frames = [Image.new("RGBA" if name != "anim_once.gif" else "RGB", (64, 48), (i * 60, 40, 255 - i * 60))
+                  for i in range(4)]
+        extra = {} if name == "anim_once.gif" else {"loop": 3}
+        frames[0].save(path, save_all=True, append_images=frames[1:], duration=[100, 200, 300, 400], **extra)
     elif name == "notmedia.mp4":
         path.write_bytes(b"this is not a media file\n" * 10)
     elif name in ("photo.jpg", "photo.png", "photo_exif.jpg", "photo_xmp_orient.jpg", "single.gif", "photo.webp", "photo.bmp",

@@ -10,6 +10,7 @@ import base64
 import io
 import json
 import logging
+import math
 import os
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -43,6 +44,7 @@ _IMAGE_PIPE_FORMATS = ("image2", "png_pipe", "jpeg_pipe", "webp_pipe", "bmp_pipe
 # Pillow format of an image with more than one frame -> `ProbeInfo.format` of the video it becomes.
 ANIMATED_IMAGES = {"GIF": "gif", "WEBP": "webp", "PNG": "apng"}
 ANIMATED_CODECS = ("gif", "webp_anim", "apng")
+MAX_ANIMATION_RATE = 100  # an animation's exact frame grid above this rate falls back to the probed rate
 ALPHA_PIX_FMTS = ("argb", "rgba", "abgr", "bgra", "yuva420p", "rgba64be", "rgba64le", "ya8", "ya16be", "ya16le")
 
 
@@ -229,18 +231,39 @@ def info_from_image(path: Path) -> ProbeInfo | None:
     return info
 
 
-def animation_duration(path: Path) -> float | None:
-    """Sum of the frame durations Pillow reads from an animated image, in seconds; None when unknown."""
+def animation_timing(path: Path) -> tuple[list[int], int] | None:
+    """(frame durations in ms, plays) Pillow reads from an animated image; plays 0 = for ever. None when unreadable.
+
+    A GIF without a loop block plays once; its loop value N repeats N times after the first play (N + 1 plays, as
+    browsers show it). WebP and APNG count the plays themselves, 0 = for ever."""
     try:
         with Image.open(path) as img:
-            total = 0
+            durations: list[int] = []
             for index in range(int(getattr(img, "n_frames", 1) or 1)):
                 img.seek(index)
                 img.load()  # the WebP reader sets a frame's duration when it decodes the frame
-                total += int(img.info.get("duration") or 0)
+                durations.append(int(img.info.get("duration") or 0))
+            loop = img.info.get("loop")
+            is_gif = img.format == "GIF"
     except Exception:  # noqa: BLE001
         return None
-    return round(total / 1000.0, 3) if total > 0 else None
+    if is_gif:
+        plays = 1 if loop is None else 0 if int(loop) == 0 else int(loop) + 1
+    else:
+        plays = max(0, int(loop or 0))
+    return durations, plays
+
+
+def animation_rate(durations: list[int]) -> str | None:
+    """The lowest frame rate on whose grid every frame boundary falls ("10" for 100 / 200 / 300 / 400 ms), as an
+    ffmpeg rate; None when that rate is above `MAX_ANIMATION_RATE` or a duration is unknown."""
+    if not durations or any(d <= 0 for d in durations):
+        return None
+    step = math.gcd(*durations)
+    rate = Fraction(1000, step)
+    if rate > MAX_ANIMATION_RATE:
+        return None
+    return str(rate.numerator) if rate.denominator == 1 else f"{rate.numerator}/{rate.denominator}"
 
 
 def probe(path: str | os.PathLike, ffprobe: str | None) -> ProbeInfo:
@@ -265,10 +288,17 @@ def probe(path: str | os.PathLike, ffprobe: str | None) -> ProbeInfo:
                 video.format = ANIMATED_IMAGES[info.format]
                 video.nb_frames = video.nb_frames or info.n_frames
                 video.has_alpha = info.has_alpha or (video.pix_fmt or "") in ALPHA_PIX_FMTS
-                if video.duration is None:  # the WebP and APNG demuxers give no duration
-                    video.duration = animation_duration(p)
-                    if video.duration and size:
-                        video.bitrate = int(size * 8 / video.duration)
+                timing = animation_timing(p)
+                if timing is not None:
+                    durations, plays = timing
+                    video.extra["anim_plays"] = plays
+                    video.extra["anim_rate"] = animation_rate(durations)
+                    if durations and durations[-1] > 0:
+                        video.extra["anim_last_s"] = durations[-1] / 1000.0
+                    if video.duration is None and sum(durations) > 0:  # the WebP and APNG demuxers give none
+                        video.duration = round(sum(durations) / 1000.0, 3)
+                        if size:
+                            video.bitrate = int(size * 8 / video.duration)
                 return video
         return info
     if not ffprobe:
