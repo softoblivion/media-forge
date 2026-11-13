@@ -114,7 +114,7 @@ def _make(name: str, path: Path) -> None:
         _ff("-f", "lavfi", "-i", "testsrc2=size=160x120:rate=10", "-t", "1", str(path))
     elif name == "notmedia.mp4":
         path.write_bytes(b"this is not a media file\n" * 10)
-    elif name in ("photo.jpg", "photo.png", "photo_exif.jpg", "single.gif", "photo.webp", "photo.bmp",
+    elif name in ("photo.jpg", "photo.png", "photo_exif.jpg", "photo_xmp_orient.jpg", "single.gif", "photo.webp", "photo.bmp",
                   "alpha.png", "big.png", "gray16.png", "cmyk.jpg", "photo.tiff"):
         img = Image.new("RGB", (400, 300), (40, 60, 90))
         draw = ImageDraw.Draw(img)
@@ -131,6 +131,13 @@ def _make(name: str, path: Path) -> None:
             exif[0x0131] = "TestSoftware"
             xmp = b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF/></x:xmpmeta>'
             img.save(path, quality=92, exif=exif.tobytes(), xmp=xmp, comment=b"secret comment")
+        elif name == "photo_xmp_orient.jpg":  # EXIF and XMP both say "rotate 90 cw on display"
+            exif = Image.Exif()
+            exif[0x0112] = 6
+            xmp = (b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-'
+                   b'ns#"><rdf:Description xmlns:tiff="http://ns.adobe.com/tiff/1.0/" tiff:Orientation="6" '
+                   b'tiff:Make="TestCam"/></rdf:RDF></x:xmpmeta>')
+            img.save(path, quality=92, exif=exif.tobytes(), xmp=xmp)
         elif name == "photo.png":
             info = PngImagePlugin.PngInfo()
             info.add_text("Comment", "png text chunk")

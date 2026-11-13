@@ -169,9 +169,11 @@ def run_image(src: Path, info: ProbeInfo, settings: Mapping[str, Any], out: Path
         with Image.open(src) as opened:
             opened.load()
             icc = opened.info.get("icc_profile")
-            xmp = opened.info.get("xmp") or opened.info.get("XML:com.adobe.xmp")
             img = ImageOps.exif_transpose(opened)
+            # Read after the transpose: Pillow removes the applied orientation from the EXIF and from the XMP
+            # (`tiff:Orientation`) of the transposed image, so a kept XMP does not turn the pixels a second time.
             exif_raw = img.info.get("exif")
+            xmp = img.info.get("xmp") or img.info.get("XML:com.adobe.xmp")
     except UserError:
         raise
     except Exception as exc:  # noqa: BLE001

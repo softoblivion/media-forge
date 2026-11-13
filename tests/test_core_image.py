@@ -73,6 +73,16 @@ class ImageTest(ScratchCase):
             self.assertEqual(exif.get(0x010F), "TestCam")
             self.assertIn(exif.get(0x0112, 1), (1, None))  # orientation was applied to the pixels
 
+    def test_kept_xmp_loses_the_applied_orientation(self):
+        """The pixels are turned upright, so a kept XMP must not ask a viewer to turn them again."""
+        out, result, _ = self.run_job("photo_xmp_orient.jpg", "upright.jpg", format="jpg", strip_metadata=False)
+        self.assertEqual((result["width"], result["height"]), (300, 400))
+        with Image.open(out) as img:
+            xmp = img.info.get("xmp") or b""
+            self.assertNotIn(0x0112, img.getexif())
+        self.assertIn(b"TestCam", xmp)  # the rest of the XMP is kept
+        self.assertNotIn(b"tiff:Orientation", xmp)
+
     def test_icc_profile_kept(self):
         from PIL import ImageCms
         src = self.out / "icc.png"
