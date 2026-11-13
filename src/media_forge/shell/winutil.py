@@ -86,6 +86,10 @@ if IS_WINDOWS:
     _kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
     _kernel32.CreateMutexW.restype = wintypes.HANDLE
     _kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    _kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    _kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    _kernel32.ReleaseMutex.argtypes = [wintypes.HANDLE]
+    _kernel32.ReleaseMutex.restype = wintypes.BOOL
 
     _dwmapi.DwmSetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, wintypes.LPCVOID, wintypes.DWORD]
     _dwmapi.DwmSetWindowAttribute.restype = ctypes.c_long
@@ -188,23 +192,34 @@ def message_box(title: str, text: str, error: bool = False) -> None:
 
 # --- single instance ---------------------------------------------------------------------------------------------
 
-def acquire_single_instance(name: str):
-    """Create the named mutex. Returns its handle (keep it alive), or None when another instance already owns it."""
+WAIT_OBJECT_0 = 0
+WAIT_ABANDONED = 0x80
+
+
+def acquire_single_instance(name: str, timeout: float = 0.0):
+    """Own the named mutex of the running instance. Returns its handle (keep it, and release it on the thread that
+    acquired it), or None when another instance still owns it after `timeout` seconds. A mutex its owner released,
+    or left behind by an instance that ended without releasing it (abandoned), is acquired."""
     if not IS_WINDOWS:
         return object()
-    handle = _kernel32.CreateMutexW(None, False, name)
+    handle = _kernel32.CreateMutexW(None, True, name)
     err = ctypes.get_last_error()
     if not handle:
         return object()  # cannot decide; do not block the launch
-    if err == ERROR_ALREADY_EXISTS:
-        _kernel32.CloseHandle(handle)
-        return None
-    return handle
+    if err != ERROR_ALREADY_EXISTS:
+        return handle  # created, and owned from the start
+    result = _kernel32.WaitForSingleObject(handle, max(0, int(timeout * 1000)))
+    if result in (WAIT_OBJECT_0, WAIT_ABANDONED):
+        return handle
+    _kernel32.CloseHandle(handle)
+    return None
 
 
 def release_single_instance(handle) -> None:
+    """Release and close the mutex `acquire_single_instance` returned, on the thread that acquired it."""
     if IS_WINDOWS and isinstance(handle, int) and handle:
         try:
+            _kernel32.ReleaseMutex(handle)
             _kernel32.CloseHandle(handle)
         except OSError:
             pass

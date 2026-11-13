@@ -264,7 +264,9 @@ class PipeServer:
         self._stop_event = None
 
     def open(self) -> None:
-        """Create the pipe; OSError when it cannot be created or its name is taken (ERROR_ACCESS_DENIED)."""
+        """Create the pipe; OSError when it cannot be created or its name is taken: ERROR_PIPE_BUSY (231) when a
+        pipe of this user already has the name (one instance at most), ERROR_ACCESS_DENIED (5) when another
+        account's pipe has it."""
         user, _level = own_identity()
         descriptor = ctypes.c_void_p()
         if not _ConvertSddl(f"D:P(A;;GA;;;{user})", SDDL_REVISION_1, ctypes.byref(descriptor), None):
@@ -296,21 +298,34 @@ class PipeServer:
             self._stop_event = None
 
     def serve(self) -> None:
-        """Serve clients one at a time until `stop`; closes the pipe at the end."""
+        """Serve clients one at a time until `stop`; closes the pipe at the end. An error while serving one client
+        (an exception of `on_message` included) is logged and the next client is served."""
         try:
             while True:
-                err, _n = _io(self.handle, lambda ov: _ConnectNamedPipe(self.handle, ov), None, self._stop_event)
-                if err == STOPPED:
-                    return
-                if err == 0:
-                    self._serve_client()
-                elif err != ERROR_NO_DATA:  # ERROR_NO_DATA: the client left before it was seen
-                    log.warning("instance pipe connect failed: %s", ctypes.FormatError(err).strip())
-                    time.sleep(0.2)
+                try:
+                    err, _n = _io(self.handle, lambda ov: _ConnectNamedPipe(self.handle, ov), None,
+                                  self._stop_event)
+                    if err == STOPPED:
+                        return
+                    if err == 0:
+                        self._serve_client()
+                    elif err != ERROR_NO_DATA:  # ERROR_NO_DATA: the client left before it was seen
+                        log.warning("instance pipe connect failed: %s", ctypes.FormatError(err).strip())
+                        if self._stopped_within(0.2):
+                            return
+                except Exception:  # noqa: BLE001 - the listener outlives any one client
+                    log.exception("a client of the instance pipe could not be served")
+                    if self._stopped_within(0.2):
+                        return
                 _DisconnectNamedPipe(self.handle)
         finally:
             _CloseHandle(self.handle)
             self.handle = None
+
+    def _stopped_within(self, seconds: float) -> bool:
+        """Pause after a failure; True when `stop` was called meanwhile."""
+        array = (wintypes.HANDLE * 1)(self._stop_event)
+        return _WaitForMultipleObjects(1, array, False, int(seconds * 1000)) == WAIT_OBJECT_0
 
     def _serve_client(self) -> None:
         deadline = time.monotonic() + self.read_timeout
@@ -334,14 +349,22 @@ class PipeServer:
 
 # --- client --------------------------------------------------------------------------------------------------------
 
-def request(name: str, data: bytes, timeout: float, reply_limit: int = 64) -> Optional[bytes]:
-    """Send `data` as one message and return the reply; None when no trusted server answered within `timeout`."""
+class UntrustedServer(OSError):
+    """The pipe is served by another user or at a lower integrity level than this process; nothing was sent."""
+
+
+def request(name: str, data: bytes, timeout: float, reply_limit: int = 64,
+            give_up: Optional[Callable[[], bool]] = None) -> Optional[bytes]:
+    """Send `data` as one message and return the reply; None when no server answered within `timeout`, or when
+    `give_up()` turned true while the pipe did not exist. Raises UntrustedServer when the server is not trusted."""
     deadline = time.monotonic() + timeout
     while True:
         handle = _CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, None, OPEN_EXISTING,
                               FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, None)
         if handle == INVALID_HANDLE_VALUE or not handle:
             err = ctypes.get_last_error()
+            if err == ERROR_FILE_NOT_FOUND and give_up is not None and give_up():
+                return None
             if err in (ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY) and time.monotonic() < deadline:
                 time.sleep(0.05)  # not open yet, or serving another client
                 continue
@@ -355,7 +378,7 @@ def request(name: str, data: bytes, timeout: float, reply_limit: int = 64) -> Op
             if not trusted_server(handle):
                 log.warning("the instance pipe is served by another user or a lower integrity level; "
                             "nothing was sent")
-                return None
+                raise UntrustedServer(ERROR_ACCESS_DENIED, "untrusted instance pipe server")
             if _write(handle, data, deadline):
                 return None
             err, reply = _read_message(handle, reply_limit, deadline)

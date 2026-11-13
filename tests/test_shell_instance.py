@@ -48,6 +48,11 @@ def unique_pipe() -> str:
     return f"{instance.PIPE_PREFIX}test-{os.getpid()}-{uuid.uuid4().hex[:8]}"
 
 
+def sent(paths, **kwargs) -> bool:
+    """True when the running instance acknowledged `paths`."""
+    return instance.hand_over(paths, **kwargs) == instance.SENT
+
+
 def open_silently(name: str, timeout: float = 2.0):
     """A client that connects and sends nothing (a hung or hostile peer); the caller closes the handle."""
     deadline = time.monotonic() + timeout
@@ -125,14 +130,14 @@ class ReceiverTest(unittest.TestCase):
 
     def test_files_reach_the_handler(self):
         self.receiver.set_handler(self.handler)
-        self.assertTrue(instance.send_files(["C:\\a.mp4", "C:\\b.jpg"], name=self.name, timeout=2))
+        self.assertTrue(sent(["C:\\a.mp4", "C:\\b.jpg"], name=self.name, timeout=2))
         self.assertTrue(self.arrived.wait(2))
         self.assertEqual(self.got, [["C:\\a.mp4", "C:\\b.jpg"]])
 
     def test_files_sent_before_the_handler_are_kept_until_it_is_set(self):
         # A second start may come while the first is still building its window.
-        self.assertTrue(instance.send_files(["C:\\early.mp4"], name=self.name, timeout=2))
-        self.assertTrue(instance.send_files(["C:\\second.mp4"], name=self.name, timeout=2))
+        self.assertTrue(sent(["C:\\early.mp4"], name=self.name, timeout=2))
+        self.assertTrue(sent(["C:\\second.mp4"], name=self.name, timeout=2))
         time.sleep(0.2)
         self.assertEqual(self.got, [])
         self.receiver.set_handler(self.handler)
@@ -144,9 +149,66 @@ class ReceiverTest(unittest.TestCase):
             self.assertIsNone(winpipe.request(self.name, b'{"cmd": "delete"}', 2))  # no acknowledgement
         self.assertIn("unreadable message", logs.output[0])
         self.receiver.set_handler(self.handler)
-        self.assertTrue(instance.send_files(["C:\\after.mp4"], name=self.name, timeout=2))
+        self.assertTrue(sent(["C:\\after.mp4"], name=self.name, timeout=2))
         self.assertTrue(self.arrived.wait(2))
         self.assertEqual(self.got, [["C:\\after.mp4"]])
+
+    def test_a_deeply_nested_message_is_refused_and_the_pipe_keeps_serving(self):
+        deep = b"[" * 200000 + b"]" * 200000  # 400,000 bytes, below MAX_MESSAGE
+        with self.assertLogs("media_forge.shell.instance", "WARNING"):
+            self.assertIsNone(winpipe.request(self.name, deep, 2))
+        self.assertTrue(self.receiver._thread.is_alive())
+        self.receiver.set_handler(self.handler)
+        self.assertTrue(sent(["C:\\after.mp4"], name=self.name, timeout=2))
+        self.assertTrue(self.arrived.wait(2))
+        self.assertEqual(self.got, [["C:\\after.mp4"]])
+
+    def test_any_error_while_reading_a_message_is_refused_and_the_pipe_keeps_serving(self):
+        with mock.patch.object(instance, "decode", side_effect=[RecursionError("deep"), ["C:\\after.mp4"]]):
+            with self.assertLogs("media_forge.shell.instance", "WARNING"):
+                self.assertIsNone(winpipe.request(self.name, b'{"files": []}', 2))
+            self.receiver.set_handler(self.handler)
+            self.assertTrue(sent(["C:\\after.mp4"], name=self.name, timeout=2))
+        self.assertTrue(self.arrived.wait(2))
+        self.assertEqual(self.got, [["C:\\after.mp4"]])
+
+    def test_the_listener_outlives_a_failure_while_serving_one_client(self):
+        server = self.receiver._server
+        real = server._serve_client
+        errors = [OSError(6, "broken")]
+
+        def fails_once():
+            if errors:
+                raise errors.pop()
+            return real()
+
+        with mock.patch.object(server, "_serve_client", side_effect=fails_once):
+            with self.assertLogs("media_forge.shell.winpipe", "ERROR"):
+                self.assertIsNone(winpipe.request(self.name, b'{"files": ["C:\\\\lost.mp4"]}', 2))
+            self.receiver.set_handler(self.handler)
+            self.assertTrue(sent(["C:\\after.mp4"], name=self.name, timeout=2))
+        self.assertTrue(self.arrived.wait(2))
+        self.assertEqual(self.got, [["C:\\after.mp4"]])
+
+    def test_stop_on_the_ui_thread_does_not_wait_for_a_slow_handler(self):
+        entered, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        calls = []
+
+        def slow(paths):
+            calls.append(paths)
+            entered.set()
+            release.wait(1.5)
+
+        self.receiver.set_handler(slow)
+        self.assertTrue(sent(["C:\\walk"], name=self.name, timeout=2))
+        self.assertTrue(entered.wait(2))
+        self.assertTrue(sent(["C:\\pending.mp4"], name=self.name, timeout=2))
+        started = time.monotonic()
+        self.receiver.stop()
+        self.assertLess(time.monotonic() - started, 0.5)
+        time.sleep(2.0)  # the slow call ends; the list that waited behind it is not handed over
+        self.assertEqual(calls, [["C:\\walk"]])
 
     def test_a_failing_handler_does_not_stop_the_receiver(self):
         calls = []
@@ -159,8 +221,8 @@ class ReceiverTest(unittest.TestCase):
 
         self.receiver.set_handler(broken)
         with self.assertLogs("media_forge.shell.instance", "ERROR"):
-            self.assertTrue(instance.send_files(["C:\\one.mp4"], name=self.name, timeout=2))
-            self.assertTrue(instance.send_files(["C:\\two.mp4"], name=self.name, timeout=2))
+            self.assertTrue(sent(["C:\\one.mp4"], name=self.name, timeout=2))
+            self.assertTrue(sent(["C:\\two.mp4"], name=self.name, timeout=2))
             self.assertTrue(self.arrived.wait(2))
         self.assertEqual(calls, [["C:\\one.mp4"], ["C:\\two.mp4"]])
 
@@ -169,9 +231,9 @@ class ReceiverTest(unittest.TestCase):
         release = threading.Event()
         self.addCleanup(release.set)
         self.receiver.set_handler(lambda paths: release.wait(5))
-        self.assertTrue(instance.send_files(["C:\\walk"], name=self.name, timeout=2))
+        self.assertTrue(sent(["C:\\walk"], name=self.name, timeout=2))
         started = time.monotonic()
-        self.assertTrue(instance.send_files(["C:\\next.mp4"], name=self.name, timeout=2))
+        self.assertTrue(sent(["C:\\next.mp4"], name=self.name, timeout=2))
         self.assertLess(time.monotonic() - started, 1.0)
 
     def test_a_silent_client_is_dropped_and_a_sender_behind_it_gives_up_in_time(self):
@@ -179,11 +241,11 @@ class ReceiverTest(unittest.TestCase):
         try:
             started = time.monotonic()
             with self.assertLogs("media_forge.shell.winpipe", "WARNING") as logs:
-                self.assertFalse(instance.send_files(["C:\\a.mp4"], name=self.name, timeout=0.3))
+                self.assertFalse(sent(["C:\\a.mp4"], name=self.name, timeout=0.3))
                 self.assertLess(time.monotonic() - started, 0.3 + 0.5)
                 # the receiver drops the silent client after its read deadline and serves the next one
                 self.receiver.set_handler(self.handler)
-                self.assertTrue(instance.send_files(["C:\\b.mp4"], name=self.name, timeout=2))
+                self.assertTrue(sent(["C:\\b.mp4"], name=self.name, timeout=2))
             self.assertTrue(any("sent nothing" in line for line in logs.output))
         finally:
             _kernel32.CloseHandle(silent)
@@ -195,7 +257,7 @@ class ReceiverTest(unittest.TestCase):
         self.addCleanup(hung.set)
         self.receiver._server.on_message = lambda data: (hung.wait(5), None)[1]  # a hung first instance
         started = time.monotonic()
-        self.assertFalse(instance.send_files(["C:\\a.mp4"], name=self.name, timeout=0.5))
+        self.assertFalse(sent(["C:\\a.mp4"], name=self.name, timeout=0.5))
         self.assertLess(time.monotonic() - started, 1.5)
 
     def test_a_second_creator_of_the_name_fails_instead_of_joining(self):
@@ -204,7 +266,7 @@ class ReceiverTest(unittest.TestCase):
             self.assertFalse(second.start())
         second.stop()
         self.receiver.set_handler(self.handler)
-        self.assertTrue(instance.send_files(["C:\\a.mp4"], name=self.name, timeout=2))
+        self.assertTrue(sent(["C:\\a.mp4"], name=self.name, timeout=2))
         self.assertTrue(self.arrived.wait(2))
 
     def test_the_pipe_admits_the_current_user_alone(self):
@@ -219,7 +281,7 @@ class ReceiverTest(unittest.TestCase):
     def test_stop_ends_the_thread_and_frees_the_pipe(self):
         self.receiver.stop()
         self.assertFalse(self.receiver._thread.is_alive())
-        self.assertFalse(instance.send_files(["C:\\late.mp4"], name=self.name, timeout=0.3))
+        self.assertFalse(sent(["C:\\late.mp4"], name=self.name, timeout=0.3))
 
     def test_a_list_sent_while_stopping_is_not_acknowledged(self):
         self.receiver._stopped = True  # stop() has begun; the pipe may still take one message
@@ -260,8 +322,8 @@ class ClientIdentityTest(unittest.TestCase):
                 with self.subTest(identity=identity), \
                         mock.patch.object(winpipe, "server_identity", return_value=identity), \
                         self.assertLogs("media_forge.shell.winpipe", "WARNING"):
-                    self.assertFalse(instance.send_files(["C:\\secret.mp4"], name=name, timeout=1))
-            self.assertTrue(instance.send_files(["C:\\ok.mp4"], name=name, timeout=2))
+                    self.assertFalse(sent(["C:\\secret.mp4"], name=name, timeout=1))
+            self.assertTrue(sent(["C:\\ok.mp4"], name=name, timeout=2))
         finally:
             server.stop()
             thread.join(2)
@@ -297,7 +359,7 @@ def impersonation_level(pipe) -> int:
 class SenderTest(unittest.TestCase):
     def test_no_receiver_returns_false_after_the_timeout(self):
         started = time.monotonic()
-        self.assertFalse(instance.send_files(["C:\\a.mp4"], name=unique_pipe(), timeout=0.3))
+        self.assertFalse(sent(["C:\\a.mp4"], name=unique_pipe(), timeout=0.3))
         self.assertLess(time.monotonic() - started, 2.0)
 
     def test_waits_for_a_receiver_that_opens_late(self):
@@ -307,7 +369,7 @@ class SenderTest(unittest.TestCase):
         timer = threading.Timer(0.4, receiver.start)
         timer.start()
         self.addCleanup(timer.cancel)
-        self.assertTrue(instance.send_files(["C:\\a.mp4"], name=name, timeout=3))
+        self.assertTrue(sent(["C:\\a.mp4"], name=name, timeout=3))
 
 
 if __name__ == "__main__":

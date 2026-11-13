@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 from typing import Callable, Iterable, Optional
 
@@ -51,8 +52,17 @@ def encode(paths: Iterable[str]) -> bytes:
     return json.dumps({"files": [str(p) for p in paths]}, ensure_ascii=False).encode("utf-8")
 
 
+# A JSON string, or the rest of the message after an unclosed quote; possessive and never failing, so one pass.
+_JSON_STRING = re.compile(rb'"(?:[^"\\]|\\(?:.|\Z))*+(?:"|\Z)', re.DOTALL)
+
+
 def decode(data: bytes) -> list[str]:
-    """The file list of one message; ValueError for anything else."""
+    """The file list of one message; ValueError for anything else. A file list holds one object and one array, so
+    a message with more brackets outside its strings is refused before it is parsed (deep nesting would exhaust
+    the parser's stack)."""
+    outside = _JSON_STRING.sub(b"", data)
+    if outside.count(b"{") + outside.count(b"[") > 2:
+        raise ValueError("not a file list")
     obj = json.loads(data.decode("utf-8"))
     files = obj.get("files") if isinstance(obj, dict) else None
     if not isinstance(files, list) or not all(isinstance(p, str) for p in files):
@@ -95,22 +105,23 @@ class FileReceiver:
             self._cond.notify_all()
 
     def stop(self) -> None:
-        """Close the pipe (later starts see no window) and end both threads; lists not yet handed over are
-        dropped."""
+        """Close the pipe (later starts see no window) and end the pipe thread; lists not yet handed over are
+        dropped. It returns at once on the UI thread: the delivery thread is not waited for, since a handler call
+        in progress (a long folder walk) may take long; it ends after that call and starts no other."""
         with self._cond:
             self._stopped = True
             self._pending.clear()
             self._cond.notify_all()
         self._server.stop()
-        for thread in (self._thread, self._delivery):
-            if thread is not None and thread.is_alive() and thread is not threading.current_thread():
-                thread.join(2.0)
+        thread = self._thread
+        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(2.0)  # the stop event cancels its pending I/O, so it ends within milliseconds
         self._server.close()
 
     def _on_message(self, data: bytes) -> Optional[bytes]:
         try:
             paths = decode(data)
-        except ValueError:
+        except Exception:  # noqa: BLE001 - any message, however malformed, is refused and the pipe goes on
             log.warning("an unreadable message on the instance pipe was ignored", exc_info=True)
             return None
         with self._cond:
@@ -130,13 +141,25 @@ class FileReceiver:
                 if self._stopped:
                     return
                 handler, paths = self._handler, self._pending.pop(0)
+            if self._stopped:  # stop() came after the list was taken: it is dropped like the others
+                return
             try:
                 handler(paths)
             except Exception:  # noqa: BLE001 - the receiver must survive a failing add
                 log.exception("files from a second start could not be added")
 
 
-def send_files(paths: Iterable[str], name: Optional[str] = None, timeout: float = SEND_TIMEOUT) -> bool:
-    """Hand `paths` to the running instance; False when no instance of this user answered within `timeout`
-    seconds (none runs, it hangs, or the pipe belongs to another user or a lower integrity level)."""
-    return winpipe.request(name or pipe_name(), encode(paths), timeout) == ACK
+SENT = "sent"
+REFUSED = "refused"  # the running instance is another user's or at a lower integrity level
+NO_ANSWER = "no answer"
+
+
+def hand_over(paths: Iterable[str], name: Optional[str] = None, timeout: float = SEND_TIMEOUT,
+              give_up: Optional[Callable[[], bool]] = None) -> str:
+    """Hand `paths` to the running instance: SENT, REFUSED (nothing was sent to it), or NO_ANSWER when none answered
+    within `timeout` seconds or `give_up()` turned true while its pipe did not exist."""
+    try:
+        reply = winpipe.request(name or pipe_name(), encode(paths), timeout, give_up=give_up)
+    except winpipe.UntrustedServer:
+        return REFUSED
+    return SENT if reply == ACK else NO_ANSWER

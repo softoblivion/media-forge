@@ -5,7 +5,10 @@ from __future__ import annotations
 import os
 import socket
 import sys
+import threading
+import time
 import unittest
+import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -101,16 +104,16 @@ class MainHelpersTest(unittest.TestCase):
         with mock.patch("media_forge.shell.winutil.acquire_single_instance", return_value=None), \
                 mock.patch("media_forge.shell.winutil.bring_window_to_front") as front, \
                 mock.patch("media_forge.shell.winutil.message_box") as box, \
-                mock.patch("media_forge.shell.instance.send_files", return_value=True) as send:
+                mock.patch("media_forge.shell.instance.hand_over", return_value="sent") as send:
             self.assertEqual(main.main(["C:\\media\\a.mp4"]), 0)
-        send.assert_called_once_with(["C:\\media\\a.mp4"])
+        self.assertEqual(send.call_args.args, (["C:\\media\\a.mp4"],))
         front.assert_called_once_with("Media Forge")
         box.assert_not_called()
 
     def test_second_instance_without_files_sends_nothing(self):
         with mock.patch("media_forge.shell.winutil.acquire_single_instance", return_value=None), \
                 mock.patch("media_forge.shell.winutil.bring_window_to_front"), \
-                mock.patch("media_forge.shell.instance.send_files") as send:
+                mock.patch("media_forge.shell.instance.hand_over") as send:
             self.assertEqual(main.main(["--debug"]), 0)
         send.assert_not_called()
 
@@ -118,9 +121,18 @@ class MainHelpersTest(unittest.TestCase):
         with mock.patch("media_forge.shell.winutil.acquire_single_instance", return_value=None), \
                 mock.patch("media_forge.shell.winutil.bring_window_to_front"), \
                 mock.patch("media_forge.shell.winutil.message_box") as box, \
-                mock.patch("media_forge.shell.instance.send_files", return_value=False):
+                mock.patch("media_forge.shell.instance.hand_over", return_value="no answer"):
             self.assertEqual(main.main(["C:\\media\\a.mp4"]), 0)
         box.assert_called_once_with("Media Forge", main.MSG_NOT_HANDED_OVER, error=True)
+
+    def test_second_instance_names_a_refusal_by_the_open_window(self):
+        with mock.patch("media_forge.shell.winutil.acquire_single_instance", return_value=None) as acquire, \
+                mock.patch("media_forge.shell.winutil.bring_window_to_front"), \
+                mock.patch("media_forge.shell.winutil.message_box") as box, \
+                mock.patch("media_forge.shell.instance.hand_over", return_value="refused"):
+            self.assertEqual(main.main(["C:\\media\\a.mp4"]), 0)
+        box.assert_called_once_with("Media Forge", main.MSG_HAND_OVER_REFUSED, error=True)
+        self.assertEqual(acquire.call_count, 1)  # a refusal is final: no wait for the mutex
 
     def test_fake_module_loads(self):
         module = main.load_fake_module()
@@ -305,6 +317,111 @@ class WindowGeometryTest(unittest.TestCase):
         self.assertEqual(self.bridge.saved, [])
         self.geometry.save()
         self.assertEqual(self.bridge.saved, [])   # a minimized window keeps its stored bounds
+
+
+class OpensTheWindow(BaseException):
+    """Raised where a start goes on to build its window, so the test stops it there."""
+
+
+@unittest.skipUnless(sys.platform == "win32", "named mutex and pipe")
+class SecondStartTest(unittest.TestCase):
+    """A real second start against a first instance that owns a private mutex and has no pipe (it is closing)."""
+
+    def setUp(self):
+        from media_forge.shell import instance, winutil
+
+        self.winutil = winutil
+        tag = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        self.mutex_name = f"Local\\MediaForge.Test-{tag}"
+        self.pipe = f"{instance.PIPE_PREFIX}test-{tag}"
+        self.release = threading.Event()
+        self.holding = threading.Event()
+        self.first = threading.Thread(target=self._first_instance, daemon=True)
+        self.first.start()
+        self.assertTrue(self.holding.wait(2.0))
+        self.receivers = []
+        self.handles = []
+        self.addCleanup(self._cleanup)
+
+    def _first_instance(self):
+        handle = self.winutil.acquire_single_instance(self.mutex_name)
+        self.holding.set()
+        self.release.wait(30)
+        self.winutil.release_single_instance(handle)
+
+    def _cleanup(self):
+        self.release.set()
+        self.first.join(5)
+        for handle in self.handles:
+            self.winutil.release_single_instance(handle)
+
+    def _start(self, files, wait):
+        """Run main.main as a second start; returns (result, seconds, box mock)."""
+        receivers, handles = self.receivers, self.handles
+        real = main._second_start
+
+        def second_start(*args):
+            handle = real(*args)
+            if handle is not None:
+                handles.append(handle)
+            return handle
+
+        class Receiver:
+            def __init__(self, *args, **kwargs):
+                receivers.append(self)
+                raise OpensTheWindow()
+
+        started = time.monotonic()
+        with mock.patch.object(main, "MUTEX_NAME", self.mutex_name), \
+                mock.patch.object(main, "SECOND_START_WAIT", wait), \
+                mock.patch.object(main, "_second_start", second_start), \
+                mock.patch("media_forge.shell.instance.pipe_name", return_value=self.pipe), \
+                mock.patch("media_forge.shell.instance.FileReceiver", Receiver), \
+                mock.patch("media_forge.shell.winutil.bring_window_to_front"), \
+                mock.patch("media_forge.shell.winutil.message_box") as box:
+            try:
+                result = main.main(files)
+            except OpensTheWindow:
+                result = "window"
+        return result, time.monotonic() - started, box
+
+    def test_a_start_whose_files_find_no_window_becomes_the_instance_when_the_first_one_closes(self):
+        threading.Timer(1.0, self.release.set).start()
+        result, seconds, box = self._start(["C:\\media\\a.mp4"], 10.0)
+        self.assertEqual(result, "window")       # it went on to open its own window, with its files
+        self.assertEqual(len(self.receivers), 1)
+        self.assertEqual(len(self.handles), 1)  # and owns the mutex
+        box.assert_not_called()
+        self.assertGreater(seconds, 0.8)
+        self.assertLess(seconds, 4.0)
+
+    def test_a_start_reports_when_the_first_instance_keeps_its_mutex(self):
+        result, seconds, box = self._start(["C:\\media\\a.mp4"], 1.5)
+        self.assertEqual(result, 0)
+        self.assertEqual(self.receivers, [])
+        box.assert_called_once_with("Media Forge", main.MSG_NOT_HANDED_OVER, error=True)
+        self.assertGreater(seconds, 1.4)
+        self.assertLess(seconds, 4.0)
+
+    def test_an_abandoned_mutex_is_acquired(self):
+        name = self.mutex_name + "-abandoned"
+        owned = threading.Event()
+        gone = threading.Event()
+
+        def owner_that_ends():
+            self.handles.append(self.winutil.acquire_single_instance(name))  # closed by the clean-up
+            owned.set()
+            gone.wait(5)  # ends without releasing: the mutex is abandoned when its thread ends
+
+        thread = threading.Thread(target=owner_that_ends, daemon=True)
+        thread.start()
+        self.assertTrue(owned.wait(2.0))
+        self.assertIsNone(self.winutil.acquire_single_instance(name, 0.2))  # still owned
+        gone.set()
+        thread.join(2.0)
+        handle = self.winutil.acquire_single_instance(name, 2.0)
+        self.assertIsNotNone(handle)
+        self.handles.append(handle)
 
 
 if __name__ == "__main__":

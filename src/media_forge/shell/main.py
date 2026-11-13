@@ -17,6 +17,7 @@ import os
 import socket
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -36,6 +37,9 @@ HTTP_PORT_FIRST = 42101  # fixed port range keeps the page origin (and its local
 HTTP_PORT_TRIES = 40
 LOG_NAME = "app.log"
 MSG_NOT_HANDED_OVER = "The files could not be added: the open Media Forge window did not answer."
+MSG_HAND_OVER_REFUSED = ("The files could not be added: the open Media Forge window runs as another user or without "
+                         "administrator rights. Open the files from that window.")
+SECOND_START_WAIT = 10.0  # s a start with files waits for a closing instance before it reports that none answered
 MSG_NO_MEDIA_GIVEN = "No media files in the given folder."
 
 log = logging.getLogger("media_forge.shell.main")
@@ -189,6 +193,38 @@ def build_engine(fake: bool, emit) -> Any:
     return Engine(emit, __version__)
 
 
+def _second_start(files: list[str], instance: Any, winutil: Any) -> Any:
+    """Another instance owns the mutex: hand `files` to it and bring it to the front (None), or, when it is closing
+    and its mutex comes free within SECOND_START_WAIT seconds, return the mutex so this start opens the window
+    with its files. The box shows only when the files did not reach a window that still runs."""
+    if not files:
+        winutil.bring_window_to_front(WINDOW_TITLE)
+        return None
+    deadline = time.monotonic() + SECOND_START_WAIT
+    acquired: list[Any] = []
+
+    def closed() -> bool:  # polled while the pipe is absent: a closing instance stops its receiver first
+        handle = winutil.acquire_single_instance(MUTEX_NAME)
+        if handle is not None:
+            acquired.append(handle)
+        return handle is not None
+
+    result = instance.hand_over(files, timeout=min(instance.SEND_TIMEOUT, SECOND_START_WAIT), give_up=closed)
+    if acquired:
+        return acquired[0]
+    if result == instance.SENT:
+        winutil.bring_window_to_front(WINDOW_TITLE)
+        return None
+    if result != instance.REFUSED:
+        mutex = winutil.acquire_single_instance(MUTEX_NAME, max(0.0, deadline - time.monotonic()))
+        if mutex is not None:
+            return mutex
+    winutil.bring_window_to_front(WINDOW_TITLE)
+    winutil.message_box(WINDOW_TITLE, MSG_HAND_OVER_REFUSED if result == instance.REFUSED else MSG_NOT_HANDED_OVER,
+                        error=True)
+    return None
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     if raw and raw[0] == APPLY_FLAG:
@@ -200,12 +236,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     from .bridge import Bridge, EventPump
 
     mutex = winutil.acquire_single_instance(MUTEX_NAME)
-    if mutex is None:
-        handed_over = not args.files or instance.send_files(args.files)
-        winutil.bring_window_to_front(WINDOW_TITLE)
-        if not handed_over:
-            winutil.message_box(WINDOW_TITLE, MSG_NOT_HANDED_OVER, error=True)
-        return 0
+    took_over = mutex is None
+    if took_over:
+        mutex = _second_start(args.files, instance, winutil)
+        if mutex is None:
+            return 0
     receiver = instance.FileReceiver()  # opened at once: a second start may come while this one is still loading
     receiver.start()
 
@@ -220,6 +255,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     index = ui_dir / "index.html"
     log.info("Media Forge %s starting (fake=%s, debug=%s, ui=%s, data=%s)", __version__, args.fake, args.debug,
              ui_dir, paths.home)
+    if took_over:
+        log.info("the running instance closed while this start handed its files over; this start opens the window")
     if not index.is_file():
         winutil.message_box(WINDOW_TITLE, f"UI file not found:\n{index}", error=True)
         return 2
