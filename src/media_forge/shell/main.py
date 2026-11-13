@@ -221,7 +221,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     # Files of the command line and of later starts: queued now, shown when the page is ready (the pump keeps the
     # events until then).
     def add_given(files: list[str]) -> None:
-        bridge._add_dropped(files, MSG_NO_MEDIA_GIVEN)
+        items = bridge._add_dropped(files, MSG_NO_MEDIA_GIVEN)
+        log.info("%d item(s) added to the list", len(items))
 
     if args.files:
         log.info("adding %d path(s) from the command line", len(args.files))
