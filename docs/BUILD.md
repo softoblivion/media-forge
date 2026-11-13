@@ -122,7 +122,9 @@ by name). A version is released once the tests, the build, the pre-publish check
 Self-update end-to-end test before a release that touches the update path: build N and N+1, serve
 `latest.json`, the N+1 exe and its `SHA256SUMS` with `python -m http.server 8765`, set
 `MEDIA_FORGE_RELEASE_URL=http://127.0.0.1:8765/latest.json`, run N from a scratch folder, Download, Restart; N+1
-must run from the same path, `MediaForge.exe.old` must be gone within about 15 s, the data folder untouched.
+must run from the same path, `MediaForge.exe.old` must be gone within about 15 s, the data folder untouched. A
+second run serves an N+1 with a greater major version and automatic download on: it is downloaded in the background
+and installed on Restart like any other update.
 
 ## 6. Window notes
 

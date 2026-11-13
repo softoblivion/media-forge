@@ -12,7 +12,7 @@
 | [OpenCV](https://opencv.org/) with the contrib modules | Apache-2.0 | bundled into the exe |
 | [FSRCNN](https://github.com/Saafke/FSRCNN_Tensorflow) model files | Apache-2.0 | bundled into the exe |
 | [PyInstaller](https://pyinstaller.org/) bootloader | GPL-2.0-or-later with the bootloader exception | bundled into the exe |
-| [Unbounded](https://github.com/googlefonts/unbounded), [Geist Mono](https://github.com/vercel/geist-font) fonts | SIL Open Font License 1.1 | bundled into the exe |
+| [Sora](https://github.com/sora-xor/sora-font), [Geist Mono](https://github.com/vercel/geist-font) fonts | SIL Open Font License 1.1 | bundled into the exe |
 | [FFmpeg](https://ffmpeg.org/) ([yt-dlp/FFmpeg-Builds](https://github.com/yt-dlp/FFmpeg-Builds)) | GPL | read from `PATH`; when none is there, downloaded at first start from its official release channel into `media-forge_data\bin\`, not redistributed with this project |
 | [EDSR](https://github.com/Saafke/EDSR_Tensorflow) model files | Apache-2.0 | downloaded on first use from their official release channel into `media-forge_data\models\`, not redistributed with this project |
 | Microsoft Edge WebView2 Runtime | Microsoft licence | part of Windows; not shipped |
