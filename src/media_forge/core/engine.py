@@ -202,12 +202,20 @@ class Engine:
         if item is None:
             return
         try:
-            if catalog.kind_for_extension(item.path) != "image":
-                while not self._tools_ready.wait(0.2):
-                    if self._stop.is_set() or self.queue.get(item_id) is None:
-                        return
+            if catalog.kind_for_extension(item.path) != "image" and not self._wait_tools_for(item_id):
+                return
             tool = self._tool
-            info = probe_mod.probe(item.path, tool.ffprobe if tool else None)
+            try:
+                info = probe_mod.probe(item.path, tool.ffprobe if tool else None)
+            except UserError as exc:
+                # An image extension that turns out to be an animation needs ffprobe: wait for the discovery
+                # rather than fail an item added in the first seconds of the app.
+                if exc.message != MSG_NO_FFMPEG or self._tools_ready.is_set():
+                    raise
+                if not self._wait_tools_for(item_id):
+                    return
+                tool = self._tool
+                info = probe_mod.probe(item.path, tool.ffprobe if tool else None)
             settings = item.settings
             current = self.queue.get(item_id)
             if current is None:
@@ -229,6 +237,13 @@ class Engine:
         except Exception:  # noqa: BLE001
             log.exception("probe failed for %s", item.path)
             self.queue.update(item_id, status="error", error="The file could not be read.", probe=None, info=None)
+
+    def _wait_tools_for(self, item_id: str) -> bool:
+        """Wait for the tool discovery; False when the app stops or the item is removed meanwhile."""
+        while not self._tools_ready.wait(0.2):
+            if self._stop.is_set() or self.queue.get(item_id) is None:
+                return False
+        return True
 
     def wait_probed(self, timeout: float | None = None) -> bool:
         deadline = None if timeout is None else time.monotonic() + timeout

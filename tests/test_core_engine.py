@@ -81,6 +81,34 @@ class EngineTest(ScratchCase):
         self.assertEqual(again, [])
         self.assertEqual(self.rec.named("toast")[-1], {"kind": "info", "message": "The file is already in the list."})
 
+    def test_animated_gif_added_before_ffmpeg_is_found(self):
+        """A file that only ffprobe can read waits for the tool discovery instead of ending in an error."""
+        from unittest import mock
+
+        from media_forge.core import tools
+        release = threading.Event()
+        real_find = tools.find_ffmpeg
+
+        def slow_find(*args, **kwargs):
+            release.wait(30)
+            return real_find(*args, **kwargs)
+
+        rec = Recorder()
+        engine = Engine(rec, "0.1.0", paths=AppPaths(home=self.out / "home_slow_tools"), allow_download=False)
+        with mock.patch.object(tools, "find_ffmpeg", slow_find):
+            engine.start()
+            try:
+                item = engine.add_files([str(media("anim.gif")), str(media("photo.jpg"))])
+                self.assertTrue(wait_for(lambda: engine.item(item[1]["id"])["status"] == "ready", 30))
+                self.assertEqual(engine.item(item[0]["id"])["status"], "probing")  # a still does not wait
+                release.set()
+                self.assertTrue(engine.wait_probed(60))
+                gif = engine.item(item[0]["id"])
+                self.assertEqual((gif["kind"], gif["status"], gif["error"]), ("video", "ready", None))
+            finally:
+                release.set()
+                engine.stop()
+
     def test_run_video_image_audio(self):
         items = self.add("clip.mp4", "photo.jpg", "tone.mp3")
         self.engine.set_item_settings(items[0]["id"], {"encoder": "cpu", "quality": 50})
