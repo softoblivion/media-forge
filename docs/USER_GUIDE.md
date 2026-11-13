@@ -14,7 +14,9 @@ Everything about using the app. Installation and the first steps are in the [REA
 
 Outputs are written next to the sources as `<name>_forge.<ext>` unless **Output** in Settings names one folder.
 A dropped folder brings the media files of all its subfolders; with one output folder, the outputs keep the same
-subfolders below it (a card's `DCIM\100` becomes `<output folder>\DCIM\100`).
+subfolders below it (a card's `DCIM\100` becomes `<output folder>\DCIM\100`). An output folder that lies inside
+the dropped folder is left out, so dropping the same folder again does not convert the outputs. A folder walk stops
+at 1000 media files (or 100,000 entries read) and says so; a file given directly is always added.
 
 Files and folders also reach the list from Explorer: **Open with** > Media Forge, **Send to** (a shortcut to
 `MediaForge.exe` in the `shell:sendto` folder), or a file dropped on `MediaForge.exe` itself. While Media Forge is
@@ -45,7 +47,7 @@ The gear in the title bar opens the settings sheet.
 | Setting | Meaning |
 |---|---|
 | **Theme** | Dusk, Nova (default), Frost or Bloom: the background colour family and the accent of the window. |
-| **Scale** | 100 (default), 125, 150, 175 or 200 %: the size of the whole window and its text, on top of the Windows display scaling. A change resizes the window by the same ratio around its centre, so its proportions stay; a step whose smallest window does not fit the screen is dimmed. |
+| **Scale** | 100 (default), 125, 150, 175 or 200 %: the size of the whole window and its text, on top of the Windows display scaling. A change resizes the window by the same ratio around its centre, so its proportions stay; a step whose smallest window does not fit the screen is dimmed. When the chosen step stops fitting (another display, another display scaling), the largest step that fits is applied and shown, and the chosen one returns on a screen with room for it. |
 | **Output** | Next to the source (`<name>_forge.<ext>`) or one folder of your choice. |
 | **Suffix** | The part added to the file name, `_forge` by default; may be empty when outputs go to a folder. |
 | **Keep file dates** | On by default: each output gets the modified and created dates of its source, so files sorted by date stay in order. Off: the output carries the time it was written. |
@@ -63,10 +65,15 @@ The gear in the title bar opens the settings sheet.
 | Photo | JPEG, PNG, WebP, AVIF, TIFF, BMP, HEIC | quality 0 to 100 for the lossy formats (PNG is optimised instead); scale original / 2x / 4x / ½ / ¼ |
 | Audio | MP3, M4A (AAC), Opus, OGG (Vorbis), FLAC, WAV | 64 to 320 kbps (Opus up to 256; FLAC and WAV are lossless, and WAV keeps the source's 16-bit, 24-bit, 32-bit or floating-point samples); sample rate keep / 44.1 / 48 kHz; mono / stereo; loudness normalisation to -16 LUFS |
 
+A video's formats show as two rows with one choice between them: **Format** holds the videos and the animated
+images, **Audio only** the outputs that keep just the sound.
+
 An animated GIF, WebP or PNG is listed as a video, so it keeps every frame: it can become an MP4 or any other
 video, or stay animated as GIF, animated WebP or animated PNG (animated PNG is lossless). In the Format row these
 two read WebP and APNG, and their tooltips say Animated WebP and Animated PNG; likewise the audio formats M4A and
-OGG carry AAC and Vorbis. Animated outputs carry no audio and cannot be held to a size limit.
+OGG carry AAC and Vorbis. Animated WebP and PNG outputs keep each frame's time and the number of plays; a GIF
+output keeps the number of plays and the total time, and a video the total time. Animated outputs carry no audio
+and cannot be held to a size limit.
 
 Upscale methods for 2x / 4x: **Lanczos** (resampling with a light sharpen), **FSRCNN** (small deterministic
 super-resolution network, bundled) and, for photos, **EDSR** (larger network, downloaded once, 38 MB per scale,
@@ -84,7 +91,7 @@ The limit is a hard cap on the output file, set per file in MB:
 - **Video:** the bitrate is computed from the duration and the audio share, encoded in two passes (or NVENC VBR
   with a cap), and the job retries once with a lower target when the result still exceeds the cap. When the audio
   would leave the picture too little room (a large lossless track kept as it is), the audio is re-encoded at a
-  lower bitrate instead.
+  lower bitrate instead and the video bitrate is computed again with the room that frees.
 - **Photo:** the quality is searched down to the limit; when the lowest acceptable quality is still too large, the
   image is downscaled step by step.
 - **Audio:** the bitrate comes from the duration, rounded down to the nearest value the format offers.
