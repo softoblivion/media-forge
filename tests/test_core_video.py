@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import unittest
+from fractions import Fraction
 from pathlib import Path
 
 from media_forge.core import catalog, ffjob, procs, probe, video
@@ -61,72 +62,135 @@ def frame_times(path: Path) -> list[float]:
     return [round(float(line), 3) for line in out.stdout.split()]
 
 
-class SizeCapPlanTest(unittest.TestCase):
-    def test_retry_after_a_copied_track_recomputes_the_video_rate(self):
-        """60 s, 10 MB cap, a FLAC track of unknown rate copied into MKV: the retry re-encodes the audio and gives
-        the video the budget minus the new audio rate, not the first rate scaled down by the overshoot."""
-        info = probe.ProbeInfo(kind="video", has_video=True, has_audio=True, width=1920, height=1080,
-                               duration=60.0, fps=30.0, vcodec="h264", acodec="flac", bitrate=3_000_000,
-                               sample_rate=48000, channels=2)
-        s = catalog.normalize("video", dict(catalog.defaults("video"), format="mkv", audio="keep",
-                                            size_limit_mb=10), None)
-        first = video.plan_video(Path("x.mkv"), info, s, None, "ffmpeg", Path("o.mkv"), Path("w"))
-        self.assertTrue(video._copies_audio(first))
-        size = (first.video_kbps + 1000.0) * 1000 / 8 * 60  # the track really takes about 1000 kbps
-        scaled = max(1, int(first.video_kbps * first.size_limit_bytes / size * 0.95))
-        retry = video.plan_video(Path("x.mkv"), info, s, None, "ffmpeg", Path("o.mkv"), Path("w"),
-                                 video_kbps=scaled, audio_fit=True)
-        self.assertFalse(video._copies_audio(retry))
-        budget_kbps = 10 * 1024 * 1024 * 8 * video.BUDGET_MARGIN / 60 / 1000
-        self.assertEqual(retry.video_kbps, int(budget_kbps - 192))
-        self.assertTrue(any("192 kbps" in note for note in retry.notes), retry.notes)
-        expected_mb = (retry.video_kbps + 192) * 1000 / 8 * 60 / 1048576
-        self.assertTrue(9.0 < expected_mb < 10.0, expected_mb)
-        # a retry that keeps the audio as planned still takes the scaled rate
-        plain = video.plan_video(Path("x.mkv"), info, s, None, "ffmpeg", Path("o.mkv"), Path("w"),
-                                 video_kbps=scaled, audio_fit=False)
-        self.assertEqual(plain.video_kbps, scaled)
+DURATION = 60.0
+MEASURED = object()  # the faked packet reader returns the track's real size
 
-    def run_capped(self, video_overshoot: float, track_kbps: float) -> list:
-        """run_video on a 60 s 10 MB cap job with a copied FLAC track, its passes faked: each writes the video at
-        `video_overshoot` times its planned rate plus the audio (`track_kbps` copied, the planned rate encoded).
-        Returns the plans of the passes."""
+
+def audio_of(plan) -> tuple[str, int | None]:
+    """(`copy`, None), (`step`, kbps) for a re-encoded copied track, (`encoded`, kbps) or (`none`, None)."""
+    if video._copies_audio(plan):
+        return "copy", None
+    note = next((n for n in plan.notes if n.startswith("audio re-encoded")), None)
+    if note:
+        return "step", int(note.split()[3])
+    args = plan.commands()[-1]
+    if "-b:a" in args:
+        return "encoded", int(args[args.index("-b:a") + 1].rstrip("k"))
+    return "none", None
+
+
+class SizeCapPlanTest(unittest.TestCase):
+    # name: (format, source codec, declared audio bps, overall bps, real track kbps, video overshoot per pass,
+    #        cap MB, packet reader result, retry audio, retry video kbps (low, high), error)
+    # pass 1 copies the track (or has none); "copy" keeps it in the retry, an int re-encodes it at that step
+    CASES = {
+        "a mkv, rate not declared, real 160": ("mkv", "aac", None, 1_000_000, 160, (1.0, 1.0), 10, MEASURED,
+                                               128, (1214, 1214), None),
+        "b declared and real 128, video 30 % over": ("mp4", "aac", 128_000, 3_000_000, 128, (1.3, 1.3), 10,
+                                                     MEASURED, "copy", (880, 890), None),
+        "c both over": ("mkv", "flac", None, 3_000_000, 1000, (1.2, 1.2), 10, MEASURED, 192, (905, 912), None),
+        "d no audio": ("mp4", None, None, 3_000_000, 0, (1.2, 1.2), 10, MEASURED, "none", (1100, 1110), None),
+        "e retry still over": ("mp4", "aac", 128_000, 3_000_000, 128, (1.3, 2.0), 10, MEASURED, "copy",
+                               (880, 890), "limit"),
+        "f cap below the audio alone": ("mp4", "aac", 128_000, 3_000_000, 128, (1.0, 1.0), 0.2, MEASURED, None,
+                                        None, "limit"),
+        "f2 cap below the video floor, no audio": ("mp4", None, None, 3_000_000, 0, (1.0, 1.0), 0.25, MEASURED,
+                                                   None, None, "limit"),
+        "g real far above declared": ("mp4", "aac", 128_000, 3_000_000, 400, (1.0, 1.0), 10, MEASURED, 192,
+                                      (1150, 1150), None),
+        "h real below the lowest step": ("mp4", "aac", 16_000, 3_000_000, 30, (1.1, 1.1), 10, MEASURED, "copy",
+                                         (1175, 1190), None),
+        "i measurement unknown": ("mp4", "aac", 128_000, 3_000_000, 128, (1.3, 1.3), 10, None, "copy",
+                                  (880, 890), None),
+        "i2 measurement empty": ("mp4", "aac", 128_000, 3_000_000, 128, (1.3, 1.3), 10, 0, "copy", (880, 890),
+                                 None),
+        "i3 measurement unknown, large track": ("mkv", "flac", None, 3_000_000, 1000, (1.0, 1.0), 10, None, "copy",
+                                                (585, 600), "limit"),
+    }
+
+    def run_capped(self, fmt, acodec, audio_bps, bps, track_kbps, overshoot, cap_mb, measured):
+        """run_video on a 60 s capped job, its passes faked: pass n writes the video at `overshoot[n]` times its
+        planned rate plus the audio (`track_kbps` copied, the step or the chosen rate encoded).
+        Returns (plans, sizes, error message or None)."""
         import tempfile
         from unittest import mock
 
-        info = probe.ProbeInfo(kind="video", has_video=True, has_audio=True, width=1920, height=1080,
-                               duration=60.0, fps=30.0, vcodec="h264", acodec="flac", bitrate=3_000_000,
-                               sample_rate=48000, channels=2)
-        s = catalog.normalize("video", dict(catalog.defaults("video"), format="mkv", audio="keep",
-                                            size_limit_mb=10), None)
-        plans = []
+        info = probe.ProbeInfo(kind="video", has_video=True, has_audio=acodec is not None, width=1920,
+                               height=1080, duration=DURATION, fps=30.0, vcodec="h264", acodec=acodec, bitrate=bps,
+                               audio_bitrate=audio_bps, sample_rate=48000, channels=2)
+        s = catalog.normalize("video", dict(catalog.defaults("video"), format=fmt, audio="keep",
+                                            size_limit_mb=cap_mb), None)
+        plans, sizes = [], []
+        real_bytes = int(track_kbps * 1000 / 8 * DURATION) if measured is MEASURED else measured
         with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "o.mkv"
+            out = Path(tmp) / f"o.{fmt}"
 
             def fake_pass(plan, model, ctx, stage=None):
                 plans.append(plan)
-                if video._copies_audio(plan):
-                    audio = track_kbps
-                else:
-                    audio = float(next(int(n.split()[3]) for n in plan.notes if n.startswith("audio re-encoded")))
-                out.write_bytes(b"\0" * int((plan.video_kbps * video_overshoot + audio) * 1000 / 8 * 60))
+                how, kbps = audio_of(plan)
+                audio = track_kbps if how == "copy" else kbps or 0
+                sizes.append(int((plan.video_kbps * overshoot[len(plans) - 1] + audio) * 1000 / 8 * DURATION))
+                out.write_bytes(b"\0" * sizes[-1])
 
+            error = None
             with mock.patch.object(video, "_execute", fake_pass), \
-                    mock.patch.object(video, "_audio_bytes", lambda ffmpeg, path: int(track_kbps * 1000 / 8 * 60),
-                                      create=True):
-                video.run_video(Path("x.mkv"), info, s, None, "ffmpeg", out, Path(tmp), None)
-            self.assertLessEqual(out.stat().st_size, 10 * 1024 * 1024)
-        return plans
+                    mock.patch.object(video, "_audio_bytes", lambda ffmpeg, path: real_bytes):
+                try:
+                    video.run_video(Path(f"x.{fmt}"), info, s, None, "ffmpeg", out, Path(tmp), None)
+                except UserError as exc:
+                    error = exc.message
+        return plans, sizes, error
 
-    def test_a_retry_after_a_copied_track_keeps_the_video_on_its_own_overshoot(self):
-        budget_kbps = 10 * 1024 * 1024 * 8 * video.BUDGET_MARGIN / 60 / 1000
-        # the track was the overshoot, the video kept its rate: the video gets the room the track frees
-        first, retry = self.run_capped(video_overshoot=1.0, track_kbps=1000)
-        self.assertEqual(retry.video_kbps, int(budget_kbps - 192))
-        # the track was as planned, the video overshot by 30 %: the retry lowers the video by that overshoot
-        first, retry = self.run_capped(video_overshoot=1.3, track_kbps=300)
-        self.assertLess(retry.video_kbps, first.video_kbps)
-        self.assertAlmostEqual(retry.video_kbps, (budget_kbps - 192) * 0.95 / 1.3, delta=2)
+    def test_the_size_cap_retry_per_case(self):
+        cap_mb_error = "The size limit could not be met; try a lower resolution."
+        for name, case in self.CASES.items():
+            fmt, acodec, audio_bps, bps, track, overshoot, cap_mb, measured, audio, bounds, error = case
+            with self.subTest(name):
+                plans, sizes, got_error = self.run_capped(fmt, acodec, audio_bps, bps, track, overshoot, cap_mb,
+                                                          measured)
+                self.assertEqual(got_error, cap_mb_error if error else None)
+                if audio is None:  # refused before any pass
+                    self.assertEqual(plans, [])
+                    continue
+                self.assertEqual(len(plans), 2)  # one pass over the cap, at most one retry
+                first, retry = plans
+                cap = cap_mb * 1024 * 1024
+                self.assertGreater(sizes[0], cap)
+                self.assertEqual(audio_of(first)[0], "none" if acodec is None else "copy")
+                how, step = audio_of(retry)
+                self.assertEqual(step if how == "step" else how, audio)
+                self.assertGreaterEqual(retry.video_kbps, bounds[0])
+                self.assertLessEqual(retry.video_kbps, bounds[1])
+                if how == "step":
+                    self.assertLess(step, track)  # never at or above the track's real rate
+                    self.assertLessEqual(retry.video_kbps, first.video_kbps + (track - step))
+                else:
+                    self.assertLess(retry.video_kbps, first.video_kbps)
+                if not error:
+                    self.assertLessEqual(sizes[1], cap)
+
+    def test_the_cap_floor_lets_a_feasible_limit_run(self):
+        """The refusal before the first pass holds only below the lowest audio step plus half the video floor."""
+        floor_kbps = min(video.AUDIO_FIT_KBPS) + video.MIN_VIDEO_KBPS // 2
+        cap_mb = floor_kbps * 1.01 * 1000 * DURATION / 8 / video.BUDGET_MARGIN / 1024 / 1024
+        plans, _, _ = self.run_capped("mp4", "aac", 128_000, 3_000_000, 128, (0.5, 0.5), cap_mb, MEASURED)
+        self.assertEqual(len(plans), 1)
+        plans, _, error = self.run_capped("mp4", "aac", 128_000, 3_000_000, 128, (0.5, 0.5), cap_mb * 0.98,
+                                          MEASURED)
+        self.assertEqual((plans, error), ([], "The size limit could not be met; try a lower resolution."))
+
+    def test_an_animation_without_a_grid_keeps_to_the_rate_cap(self):
+        """Without `anim_rate` an animated source falls back to its probed rate, at most MAX_ANIMATION_RATE."""
+        s = catalog.normalize("video", dict(catalog.defaults("video"), format="mp4"), None)
+        for fps_str, extra, expected in (("200/1", {}, "fps=100"), ("25/1", {}, "fps=25/1"),
+                                         ("200/1", {"anim_rate": "100/3"}, "fps=100/3")):
+            with self.subTest(fps_str=fps_str, extra=extra):
+                info = probe.ProbeInfo(kind="video", has_video=True, width=64, height=64, duration=1.0,
+                                       fps=float(Fraction(fps_str)), fps_str=fps_str, vcodec="webp",
+                                       extra={"anim_plays": 0, **extra})
+                plan = video.plan_video(Path("x.webp"), info, s, None, "ffmpeg", Path("o.mp4"), Path("w"))
+                vf = plan.commands()[0][plan.commands()[0].index("-vf") + 1]
+                self.assertEqual(vf.split(",")[-1], expected)
 
     def test_loop_arguments_follow_the_play_count(self):
         self.assertEqual(video._loop_args("gif", 0), ["-loop", "0"])
