@@ -10,7 +10,7 @@ export const nFiles = (n) => `${n} ${plural(n, ['file', 'files'])}`;
 
 const CODECS = {
   h264: 'H.264', avc1: 'H.264', hevc: 'HEVC', h265: 'HEVC', vp9: 'VP9', vp8: 'VP8', av1: 'AV1', prores: 'ProRes',
-  mpeg4: 'MPEG-4', mpeg2video: 'MPEG-2', gif: 'GIF', aac: 'AAC', mp3: 'MP3', opus: 'Opus', vorbis: 'Vorbis',
+  mpeg4: 'MPEG-4', mpeg2video: 'MPEG-2', gif: 'GIF', webp_anim: 'WebP', apng: 'APNG', aac: 'AAC', mp3: 'MP3', opus: 'Opus', vorbis: 'Vorbis',
   flac: 'FLAC', pcm_s16le: 'PCM', pcm_s24le: 'PCM', alac: 'ALAC', ac3: 'AC-3', eac3: 'E-AC-3',
 };
 
