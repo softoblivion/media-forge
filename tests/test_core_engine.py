@@ -375,6 +375,58 @@ class EngineTest(ScratchCase):
         self.assertEqual(sorted(p.name for p in target.iterdir()), ["kept"])
         self.assertEqual(list((target / "kept").iterdir()), [])
 
+    def _fail_holding_the_output(self, hold: float):
+        """Run one audio job that writes its output, has it opened by another handle without delete sharing (as a
+        virus scanner or the indexer does) for `hold` seconds, and fails. Returns (target folder, output path,
+        seconds the job took, the holder's release event)."""
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        target = Path(tempfile.mkdtemp(prefix="held_", dir=self.out))
+        self.engine.set_settings({"output_dir": str(target)})
+        items = self.engine.add_files([str(media("tone.mp3"))], rel_dirs=["sub"])
+        self.assertTrue(self.engine.wait_probed(60))
+        seen: list = []
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def hold_then_fail(src, info, settings, ffmpeg, out, ctx):
+            out.write_bytes(b"\0" * 1000)
+            holder = open(out, "rb")  # noqa: SIM115 - closed by the timer thread
+            seen.append(out)
+
+            def close_later():
+                release.wait(hold)
+                holder.close()
+
+            threading.Thread(target=close_later, daemon=True).start()
+            raise OSError(5, "the encoder lost its output")
+
+        with mock.patch("media_forge.core.engine.audio_mod.run_audio", side_effect=hold_then_fail):
+            started = time.monotonic()
+            self.engine.start_items(None)
+            self.assertTrue(self.engine.wait_idle(60))
+            seconds = time.monotonic() - started
+        self.assertEqual(self.engine.item(items[0]["id"])["status"], "error")
+        return target, seen[0], seconds, release
+
+    def test_a_failed_job_removes_an_output_another_process_holds_for_a_moment(self):
+        target, out, seconds, _release = self._fail_holding_the_output(0.3)
+        self.assertFalse(out.exists())
+        self.assertEqual(list(target.iterdir()), [])  # the mirrored folder went too
+        self.assertLess(seconds, 3.0)
+
+    def test_a_failed_job_reports_an_output_it_cannot_remove_and_ends_in_bounded_time(self):
+        with self.assertLogs("media_forge.core", "WARNING") as logs:
+            target, out, seconds, release = self._fail_holding_the_output(30.0)
+        self.assertTrue(out.exists())
+        self.assertTrue(any("could not be removed" in line and out.name in line for line in logs.output),
+                        logs.output)
+        self.assertGreater(seconds, 2.5)
+        self.assertLess(seconds, 6.0)
+        release.set()
+
 
 class QueueTest(unittest.TestCase):
     """The queue alone with a fake runner: order, lanes, parallelism, cancel of queued items."""

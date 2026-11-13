@@ -22,7 +22,7 @@ from . import catalog, ffjob, image as image_mod, probe as probe_mod, procs, too
 from .errors import (MSG_BUSY, MSG_NO_FFMPEG, MSG_NOT_FOUND, MSG_OUTPUT_DIR_MISSING, MSG_UNKNOWN_ITEM,
                      MSG_WRITE_DENIED, Cancelled, UserError)
 from .jobs import Item, JobContext, JobQueue
-from .paths import AppPaths, copy_file_times, remove_path
+from .paths import AppPaths, copy_file_times, remove_output, remove_path
 from .settings import Settings, folder_usable
 
 log = logging.getLogger("media_forge.core.engine")
@@ -450,7 +450,7 @@ class Engine:
             raise UserError(MSG_WRITE_DENIED) from exc
         finally:
             if not ok:
-                remove_path(out)
+                remove_output(out)  # retried while another process holds the new file; the folders after it
                 _remove_empty_folders(created)
             remove_path(workdir)
 

@@ -6,6 +6,7 @@ Nothing outside this module builds a path inside the data folder (ARCHITECTURE.m
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import sys
@@ -14,6 +15,8 @@ from pathlib import Path
 
 APP_DIR_NAME = "media-forge_data"
 ENV_HOME = "MEDIA_FORGE_HOME"
+
+log = logging.getLogger("media_forge.core.paths")
 
 
 def app_dir() -> Path:
@@ -94,6 +97,30 @@ def remove_path(path: Path) -> None:
         pass
     except OSError:
         pass
+
+
+SHARING_ERRORS = (32, 5)  # ERROR_SHARING_VIOLATION, ERROR_ACCESS_DENIED (a delete-pending or read-only file too)
+
+
+def remove_output(path: Path, timeout: float = 3.0, step: float = 0.15) -> bool:
+    """Delete the partial output of a failed job. A file another process has just opened (a virus scanner, the
+    search indexer, a thumbnailer) refuses deletion for a moment, so a sharing or access error is retried for up to
+    `timeout` seconds; True when the file is gone, else the file is left and a warning names it."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            Path(path).unlink()
+            return True
+        except FileNotFoundError:
+            return True
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in SHARING_ERRORS or time.monotonic() >= deadline:
+                log.warning("the partial output %s could not be removed: %s", path, exc)
+                return False
+        except OSError as exc:
+            log.warning("the partial output %s could not be removed: %s", path, exc)
+            return False
+        time.sleep(step)
 
 
 def atomic_write_bytes(path: Path, data: bytes) -> None:

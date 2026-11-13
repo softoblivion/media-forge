@@ -273,6 +273,10 @@ def run(args: list[str], *, on_line: Callable[[str], None] | None = None, captur
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+            try:
+                proc.wait(timeout=5)  # its output file stays open until the process has ended
+            except subprocess.TimeoutExpired:
+                log.warning("%s did not end after it was killed", os.path.basename(str(args[0])))
         out.join(timeout=5)
         err.join(timeout=5)
         stdout = out.data() if isinstance(out, BytesPump) else b""

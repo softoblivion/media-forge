@@ -172,6 +172,34 @@ class ProcsTest(ScratchCase):
         res = procs.run([sys.executable, "-c", "import time; time.sleep(30)"], timeout=0.5)
         self.assertTrue(res.timed_out)
 
+    def test_a_process_that_outlives_its_job_kill_is_waited_for_after_the_kill(self):
+        import io
+        import subprocess
+        from unittest import mock
+
+        calls = []
+
+        class Proc:  # survives the job kill and the 10 s wait; ends once killed directly
+            stdout, stderr, returncode = io.BytesIO(b""), io.BytesIO(b""), None
+
+            def wait(self, timeout=None):
+                calls.append(("wait", timeout))
+                if self.returncode is None:
+                    raise subprocess.TimeoutExpired("ffmpeg", timeout)
+                return self.returncode
+
+            def kill(self):
+                calls.append(("kill", None))
+                self.returncode = 1
+
+        cancel = threading.Event()
+        cancel.set()
+        job = mock.Mock()
+        with mock.patch.object(procs, "spawn", return_value=Proc()):
+            res = procs.run(["ffmpeg"], cancel=cancel, job=job)
+        self.assertTrue(res.cancelled)
+        self.assertEqual(calls[-2:], [("kill", None), ("wait", 5)])
+
 
 if __name__ == "__main__":
     unittest.main()
